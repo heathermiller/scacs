@@ -21,6 +21,7 @@ import akka.actor.Actor
 import Actor._
 
 class ClusterService extends Actor{
+  var allAddresses: List[(String, Int)] = List()
 
   def receive = {
     case Announce(hostname, port) => 
@@ -28,12 +29,18 @@ class ClusterService extends Actor{
       val localhost = remote.address.getHostName()
       val localport = remote.address.getPort()
       master ! Announce(localhost, localport) 
+
     case Nodes(addresses) =>
       println("[ClusterService] received node addresses: "+addresses)
+      allAddresses = addresses
+
     case Start(clazz) =>
       println("[ClusterService] starting instance of "+clazz)
-      remote.register(actorOf(clazz))
+      val newActor = actorOf(clazz).start()
+      remote.register(newActor)
+      newActor !! Nodes(allAddresses)
       self.reply()
+
     case _ =>
       println("[ClusterService] unknown message")
   }
