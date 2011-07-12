@@ -28,7 +28,10 @@ class ClusterService extends Actor{
       val localhost = remote.address.getHostName()
       val localport = remote.address.getPort()
       master ! Announce(localhost, localport) 
-    case _      => println("[ClusterService] received an unknown message.")
+    case Nodes(addresses) =>
+      println("[ClusterService] received node addresses: "+addresses)
+    case _ =>
+      println("[ClusterService] unknown message")
   }
 
 }

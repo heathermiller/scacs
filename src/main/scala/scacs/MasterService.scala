@@ -1,24 +1,38 @@
 
 package scacs
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import Actor._
 import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
-  var count = 0
   var numNodes = 0
-
-  def receive = { //placeholder
+  var addresses: List[(String, Int)] = List()
+  var nodeRefs: List[ActorRef] = List()
+  
+  def receive = {
     case ClusterSize(num) => 
       numNodes = num
-      println("[MasterService] the master should wait for "+numNodes+" nodes to register.")
+      println("[MasterService] waiting for "+
+        numNodes+" nodes to register")
       self.reply()
-    case Announce(hostname, port) =>
-      println("[MasterService] received announce message for host: "+hostname+" and port: "+port)
-      count += 1
-      if (count ==  numNodes) self.stop()
-    case _      => println("[MasterService] received an unknown message.")
+    case Announce(newHost, newPort) =>
+      println("[MasterService] new host "+
+        newHost+":"+newPort)
+      addresses ::= (newHost, newPort)
+      if (addresses.length == numNodes) {
+        println("[MasterService] all nodes have registered")
+        nodeRefs = addresses map { case (hostname, port) =>
+          remote.actorFor(classOf[ClusterService].getCanonicalName,
+            hostname,
+            port)
+        }
+        nodeRefs foreach { service => service ! Nodes(addresses) }
+        Thread.sleep(2000)
+        self.stop()
+      }
+    case _ =>
+      println("[MasterService] unknown message")
   }
 
   // whenever MasterService actor terminates, the whole remote service should shut down.
@@ -26,11 +40,9 @@ class MasterService extends Actor {
 }
 
 object MasterService {
-
   val terminate = new CountDownLatch(1)
 
   def main(args: Array[String]) = {
-    
     val hostname = args(0)
     val port = args(1).toInt
     val numNodes = args(2).toInt
@@ -38,14 +50,13 @@ object MasterService {
     remote.start(hostname,port)
     remote.register(actorOf[MasterService])
 
-    val master = Actor.remote.actorFor(classOf[MasterService].getCanonicalName,hostname,port)
+    val master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
     master !! ClusterSize(numNodes)
 
     terminate.await()
 
     println("[EXIT: MasterService] Shutting down.")
     remote.shutdown()
-    registry.shutdownAll()
     println("[EXIT: MasterService] Done.")
   }
 
