@@ -30,6 +30,10 @@ class ClusterService extends Actor{
       master ! Announce(localhost, localport) 
     case Nodes(addresses) =>
       println("[ClusterService] received node addresses: "+addresses)
+    case Start(clazz) =>
+      println("[ClusterService] starting instance of "+clazz)
+      remote.register(actorOf(clazz))
+      self.reply()
     case _ =>
       println("[ClusterService] unknown message")
   }
