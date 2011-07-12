@@ -1,19 +1,13 @@
 /*
- * TODO:
- * 1) start akka remote source on <hostname,port>
- * 2) start a remote actor (ClusterService Actor)
- *   a) allow other actors to be started locally
- *   b) receive info of all neighbors.
- * 3) start custom remote actor
- *   a) needs acces to info of all neighbors
- *      - either local message from ClusterService Actor (what we'll do now)
- *      - or message from Master Actor somehow
- */
-/*
  * (Intended) Steps to get it running...
  * 1) start MasterService
  * 2) start ClusterService on each node
+ *
+ * From here, we have to decide... 
+ * Either Delite invokes methods on the MasterService object, or it
+ * extends a trait version of it.
  */
+
 
 package scacs
 
@@ -33,6 +27,7 @@ class ClusterService extends Actor{
     case Nodes(addresses) =>
       println("[ClusterService] received node addresses: "+addresses)
       allAddresses = addresses
+      self.reply()
 
     case Start(clazz) =>
       println("[ClusterService] starting instance of "+clazz)

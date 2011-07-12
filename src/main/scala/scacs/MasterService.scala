@@ -27,9 +27,9 @@ class MasterService extends Actor {
             hostname,
             port)
         }
-        nodeRefs foreach { service => service ! Nodes(addresses) }
-        Thread.sleep(2000)
+        nodeRefs foreach { service => service !! Nodes(addresses) }
 
+        //test, sends message to first node
         nodeRefs(0) !! Start(classOf[EchoActor])
         val echoActor = remote.actorFor(
           classOf[EchoActor].getCanonicalName,
