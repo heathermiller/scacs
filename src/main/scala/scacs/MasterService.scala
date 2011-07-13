@@ -7,8 +7,7 @@ import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
   var numNodes = 0
-  var addresses: List[(String, Int)] = List()
-  var nodeRefs: List[ActorRef] = List()
+  var nodeRefs: Map[(String, Int), ActorRef] = Map()
   
   def receive = {
     case ClusterSize(num) =>
@@ -16,29 +15,29 @@ class MasterService extends Actor {
       println("[MasterService] waiting for "+
         numNodes+" nodes to register")
       self.reply()
+
     case Announce(newHost, newPort) =>
       println("[MasterService] new host "+
         newHost+":"+newPort)
-      addresses ::= (newHost, newPort)
-      if (addresses.length == numNodes) {
+      val nodeRef = remote.actorFor(
+        classOf[ClusterService].getCanonicalName,
+        newHost,
+        newPort)
+      nodeRefs += ((newHost, newPort) -> nodeRef)
+
+      if (nodeRefs.size == numNodes) {
         println("[MasterService] all nodes have registered")
-        nodeRefs = addresses map { case (hostname, port) =>
-          remote.actorFor(classOf[ClusterService].getCanonicalName,
-            hostname,
-            port)
-        }
-        nodeRefs foreach { service => service ! Nodes(addresses) }
-        Thread.sleep(2000)
-
-        nodeRefs(0) !! Start(classOf[EchoActor])
-        val echoActor = remote.actorFor(
-          classOf[EchoActor].getCanonicalName,
-          addresses(0)._1,
-          addresses(0)._2)
-        println(echoActor !! "hello")
-
-        self.stop()
+        nodeRefs.values foreach { service => service !! Nodes(nodeRefs.keys.toList) }
       }
+
+    case startMsg @ StartActorAt(host, port, clazz) =>
+      nodeRefs((host, port)) !! startMsg
+      val startedActor = remote.actorFor(
+        clazz.getCanonicalName,
+        host,
+        port)
+      self.reply(startedActor)
+
     case _ =>
       println("[MasterService] unknown message")
   }
@@ -61,8 +60,15 @@ object MasterService {
     val master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
     master !! ClusterSize(numNodes)
 
-    terminate.await()
+    Thread.sleep(10000)
 
+    // remotely start EchoActor
+    val response =
+      master !! StartActorAt("localhost", 9001, classOf[EchoActor])
+    val echoActor = response.get.asInstanceOf[ActorRef]
+    println(echoActor !! "hello")
+
+    //terminate.await()
     println("[EXIT: MasterService] Shutting down.")
     remote.shutdown()
     println("[EXIT: MasterService] Done.")

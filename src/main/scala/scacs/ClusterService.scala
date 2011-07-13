@@ -17,24 +17,26 @@
 
 package scacs
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import Actor._
 
 class ClusterService extends Actor{
   var allAddresses: List[(String, Int)] = List()
+  var master: ActorRef = null
 
   def receive = {
-    case Announce(hostname, port) => 
-      val master = remote.actorFor(classOf[MasterService].getCanonicalName,hostname,port)
+    case Announce(hostname, port) =>
+      master = remote.actorFor(classOf[MasterService].getCanonicalName,hostname,port)
       val localhost = remote.address.getHostName()
       val localport = remote.address.getPort()
-      master ! Announce(localhost, localport) 
+      master ! Announce(localhost, localport)
 
     case Nodes(addresses) =>
       println("[ClusterService] received node addresses: "+addresses)
       allAddresses = addresses
+      self.reply()
 
-    case Start(clazz) =>
+    case StartActorAt(_, _, clazz) =>
       println("[ClusterService] starting instance of "+clazz)
       val newActor = actorOf(clazz).start()
       remote.register(newActor)
@@ -48,9 +50,7 @@ class ClusterService extends Actor{
 }
 
 object ClusterService {
-  
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
-    
     remote.start(hostname,port)
     remote.register(actorOf[ClusterService])
     val localMaster = remote.actorFor(classOf[ClusterService].getCanonicalName,hostname,port)    

@@ -29,4 +29,4 @@ case class Nodes(addresses: List[(String, Int)])
  *
  * @param clazz the class of the actor to be started
  */
-case class Start(clazz: Class[_ <: Actor])
+case class StartActorAt(host: String, port: Int, clazz: Class[_ <: Actor])
