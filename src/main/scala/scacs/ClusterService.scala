@@ -12,11 +12,10 @@
 package scacs
 import akka.actor.{Actor, ActorRef}
 import Actor._
-import scala.collection.mutable.HashMap
 
 class ClusterService extends Actor{
   var allAddresses: List[(String, Int)] = List()
-  var data = new HashMap[Int, Any]
+  var data = Map[Int, Any]()
   var master: ActorRef = null
 
   def receive = {
@@ -41,10 +40,15 @@ class ClusterService extends Actor{
     case SubmitAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
       data += (trackingNumber.get -> result)
+      println("[ClusterService] stored result with tracking number "+trackingNumber.get)
 
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
       if (!trackingNumber.isEmpty) data += (trackingNumber.get -> result)
+      self.reply(result)
+
+    case RetrieveFrom(_, _, trackingNumber) =>
+      val result = data(trackingNumber)
       self.reply(result)
 
     case _ =>

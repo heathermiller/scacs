@@ -69,3 +69,4 @@ case class InvokeAt(host: String, port: Int,
                   input: Any,
                   trackingNumber: Option[Int] = None)
 
+case class RetrieveFrom(host: String, port: Int, trackingNumber: Int)
