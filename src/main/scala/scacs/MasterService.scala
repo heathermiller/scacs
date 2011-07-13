@@ -3,6 +3,7 @@ package scacs
 
 import akka.actor.{Actor, ActorRef}
 import Actor._
+import scala.collection.mutable.HashMap
 import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
@@ -11,11 +12,13 @@ class MasterService extends Actor {
   var nodeRefs: List[ActorRef] = List()
   
   def receive = {
+
     case ClusterSize(num) =>
       numNodes = num
       println("[MasterService] waiting for "+
         numNodes+" nodes to register")
       self.reply()
+
     case Announce(newHost, newPort) =>
       println("[MasterService] new host "+
         newHost+":"+newPort)
@@ -28,17 +31,8 @@ class MasterService extends Actor {
             port)
         }
         nodeRefs foreach { service => service !! Nodes(addresses) }
-
-        //test, sends message to first node
-        nodeRefs(0) !! Start(classOf[EchoActor])
-        val echoActor = remote.actorFor(
-          classOf[EchoActor].getCanonicalName,
-          addresses(0)._1,
-          addresses(0)._2)
-        println(echoActor !! "hello")
-
-        self.stop()
       }
+
     case _ =>
       println("[MasterService] unknown message")
   }

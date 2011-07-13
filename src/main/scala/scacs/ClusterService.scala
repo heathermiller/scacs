@@ -10,16 +10,18 @@
 
 
 package scacs
-
-import akka.actor.Actor
+import akka.actor.{Actor, ActorRef}
 import Actor._
+import scala.collection.mutable.HashMap
 
 class ClusterService extends Actor{
   var allAddresses: List[(String, Int)] = List()
+  var data = new HashMap[Int, Any]
+  var master: ActorRef = null
 
   def receive = {
     case Announce(hostname, port) => 
-      val master = remote.actorFor(classOf[MasterService].getCanonicalName,hostname,port)
+      master = remote.actorFor(classOf[MasterService].getCanonicalName,hostname,port)
       val localhost = remote.address.getHostName()
       val localport = remote.address.getPort()
       master ! Announce(localhost, localport) 
@@ -35,6 +37,15 @@ class ClusterService extends Actor{
       remote.register(newActor)
       newActor !! Nodes(allAddresses)
       self.reply()
+
+    case SubmitAt(_, _, block, input, trackingNumber) =>
+      val result = block(this, input)
+      data += (trackingNumber.get -> result)
+
+    case InvokeAt(_, _, block, input, trackingNumber) =>
+      val result = block(this, input)
+      if (!trackingNumber.isEmpty) data += (trackingNumber.get -> result)
+      self.reply(result)
 
     case _ =>
       println("[ClusterService] unknown message")
