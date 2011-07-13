@@ -43,6 +43,12 @@ class MasterService extends Actor {
 
 object MasterService {
   val terminate = new CountDownLatch(1)
+  var TrNumIncrementer = 0
+
+  def newTrackingNumber = {
+    TrNumIncrementer += 1
+    TrNumIncrementer
+  }
 
   def main(args: Array[String]) = {
     val hostname = args(0)
