@@ -1,13 +1,15 @@
 
 package scacs
 
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, Channel}
 import Actor._
 import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
   var numNodes = 0
   var nodeRefs: Map[(String, Int), ActorRef] = Map()
+  var results: Map[Int, Any] = Map()
+  var channels: Map[Int,Channel[Any]] = Map()
 
   def getNode(host: String, port: Int): ActorRef =
     nodeRefs.get((host, port)) match {
@@ -42,13 +44,34 @@ class MasterService extends Actor {
       println("[MasterService] sending SubmitAt to "+host+":"+port)
       val nodeRef = getNode(host, port)
       nodeRef ! msg
+
+    case msg @ InvokeAt(host, port, fun, input, tracking) =>
+      println("[MasterService] sending InvokeAt to "+host+":"+port)
+      val nodeRef = getNode(host, port)
+      nodeRef ! msg
+
+    case (trackingNumber: Int, result: Any) =>
+      if ( channels.contains(trackingNumber) ) {
+        val channel = channels(trackingNumber)
+        channel ! (trackingNumber, result)
+        channels -= trackingNumber
+      }
+      else
+        results += (trackingNumber -> result)  
     
-    case msg @ RetrieveFrom(host, port, tracking) =>
+    case RetrieveFrom("", _, tracking) =>
+      if ( results.contains(tracking) )
+        self.reply(results(tracking))
+      else 
+        channels += (tracking -> self.channel) // we're queueing up the request
+
+    case msg @ RetrieveFrom(host, port, tracking) if host != "" =>
       val nodeRef = getNode(host, port)
       self.reply((nodeRef !! msg).get)
-    
-    case _ =>
-      println("[MasterService] unknown message")
+
+    case Shutdown =>
+      nodeRefs.values foreach { service => service ! Shutdown }
+      self.reply()
   }
   
   // whenever MasterService actor terminates, the whole remote service should shut down.
@@ -59,40 +82,86 @@ object MasterService {
   val terminate = new CountDownLatch(1)
   val doneInit = new CountDownLatch(1)
   var TrNumIncrementer = 0
+  var master: ActorRef = null
 
   def newTrackingNumber = {
     TrNumIncrementer += 1
     TrNumIncrementer
   }
 
-  def main(args: Array[String]) = {
-    val hostname = args(0)
-    val port = args(1).toInt
-    val numNodes = args(2).toInt
-    
+  def config(hostname: String, port: Int, numNodes: Int) = {
     remote.start(hostname,port)
-    remote.register(actorOf[MasterService])
-    
-    val master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
+    remote.register(actorOf[MasterService])   
+
+    master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
     master !! ClusterSize(numNodes)
 
-    doneInit.await()
-
-    val fun = { (cs: ClusterService, list: Any) =>
-      list.asInstanceOf[List[Int]].map { x => println(x); x + 1 }
-    }
-    val tn = newTrackingNumber
-    master ! SubmitAt("localhost", 9001, fun, List(1, 2, 3), Some(tn))
-    val result = master !! RetrieveFrom("localhost", 9001, tn)
-    println(result)
-
-    terminate.countDown()
-    Thread.sleep(10000)
-    terminate.await()
-
-    println("[EXIT: MasterService] Shutting down.")
+    doneInit.await
+  }
+  
+  def shutdown = {
+    master !! Shutdown
     remote.shutdown()
-    println("[EXIT: MasterService] Done.")
+    registry.shutdownAll()
+    println("[MasterService] EXIT. Shutting down.")
+  }
+
+  def submitAt[T](nodes: List[(String,Int)], partitionedData: List[T], fun: T=>Any): List[Int] = {
+    var tns = List[Int]()
+    if (nodes.length == partitionedData.length) {
+      for ((node,data) <- nodes zip partitionedData) {
+        val (hostname, port) = node
+        val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+        val tn = newTrackingNumber
+        tns = tn :: tns
+        master ! SubmitAt(hostname, port, internalFun, data, Some(tn))
+      }
+      tns
+    } else 
+      sys.error("[ERROR: submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
+  }
+
+  def invokeAt[T](nodes: List[(String,Int)], partitionedData: List[T], fun: T=>Any): List[Any] = {
+    var tns = List[Int]()
+    if (nodes.length == partitionedData.length) {
+      for ((node,data) <- nodes zip partitionedData) {
+        val (hostname, port) = node
+        val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+        val tn = newTrackingNumber
+        tns = tn :: tns
+        master ! InvokeAt(hostname, port, internalFun, data, Some(tn))
+      }
+      for (tn <- tns) yield {
+        val res = master !! RetrieveFrom("", 0, tn)
+        res.get
+      }
+    } else 
+      sys.error("[ERROR: submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
+  }
+
+  def retrieveFrom = sys.error("not implemented yet.")
+
+  //main used for testing only.
+  def main(args: Array[String]) = {
+    
+    // this is how we configure the master, specify its hostname, its port, and the number of nodes in the cluster
+    MasterService.config("localhost", 8000, 1)
+
+    val nodes = List(("localhost",8001))
+    val data = List(List(1,2,3))
+    val fun = (list: List[Int]) => list.map { x => println(x); x + 1 }
+
+    //val tns = submitAt(nodes,data,fun)
+    val res = invokeAt(nodes,data,fun)
+    println(res)
+
+    //val result = master !! RetrieveFrom("localhost", 8001, tns(0))
+    //println(result)
+
+    MasterService.shutdown
+
+//    terminate.countDown()
+//    terminate.await()
   }
 
 }

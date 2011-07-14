@@ -44,12 +44,20 @@ class ClusterService extends Actor{
 
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
-      if (!trackingNumber.isEmpty) data += (trackingNumber.get -> result)
-      self.reply(result)
+      if (!trackingNumber.isEmpty) {
+        data += (trackingNumber.get -> result)
+        self.sender.get ! (trackingNumber.get, result)
+      } else 
+        self.reply(result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
       val result = data(trackingNumber)
       self.reply(result)
+
+    case Shutdown =>
+      remote.shutdown()
+      registry.shutdownAll()
+      println("[ClusterService] EXIT. Shutting down.")
 
     case _ =>
       println("[ClusterService] unknown message")
