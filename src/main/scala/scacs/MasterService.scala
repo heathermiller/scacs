@@ -23,11 +23,13 @@ class MasterService extends Actor {
         classOf[ClusterService].getCanonicalName,
         newHost,
         newPort)
+
       nodeRefs += ((newHost, newPort) -> nodeRef)
 
       if (nodeRefs.size == numNodes) {
         println("[MasterService] all nodes have registered")
         nodeRefs.values foreach { service => service !! Nodes(nodeRefs.keys.toList) }
+        MasterService.doneInit.countDown()
       }
 
     case startMsg @ StartActorAt(host, port, clazz) =>
@@ -37,6 +39,10 @@ class MasterService extends Actor {
         host,
         port)
       self.reply(startedActor)
+
+    case stopMsg @ StopServiceAt(host, port) =>
+      nodeRefs((host, port)) !! stopMsg
+      self.reply()
 
     case _ =>
       println("[MasterService] unknown message")
@@ -48,19 +54,19 @@ class MasterService extends Actor {
 
 object MasterService {
   val terminate = new CountDownLatch(1)
+  val doneInit = new CountDownLatch(1)
 
   def main(args: Array[String]) = {
     val hostname = args(0)
     val port = args(1).toInt
     val numNodes = args(2).toInt
     
-    remote.start(hostname,port)
+    remote.start(hostname, port)
     remote.register(actorOf[MasterService])
 
     val master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
     master !! ClusterSize(numNodes)
-
-    Thread.sleep(10000)
+    doneInit.await()
 
     // remotely start EchoActor
     val response =
@@ -68,8 +74,11 @@ object MasterService {
     val echoActor = response.get.asInstanceOf[ActorRef]
     println(echoActor !! "hello")
 
+    master !! StopServiceAt("localhost", 9001)
+
     //terminate.await()
     println("[EXIT: MasterService] Shutting down.")
+    registry.shutdownAll()
     remote.shutdown()
     println("[EXIT: MasterService] Done.")
   }

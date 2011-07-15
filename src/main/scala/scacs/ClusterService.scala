@@ -19,6 +19,7 @@ package scacs
 
 import akka.actor.{Actor, ActorRef}
 import Actor._
+import java.util.concurrent.CountDownLatch
 
 class ClusterService extends Actor{
   var allAddresses: List[(String, Int)] = List()
@@ -43,6 +44,10 @@ class ClusterService extends Actor{
       newActor !! Nodes(allAddresses)
       self.reply()
 
+    case StopServiceAt(_, _) =>
+      println("[ClusterService] shutting down...")
+      ClusterService.terminate.countDown()
+
     case _ =>
       println("[ClusterService] unknown message")
   }
@@ -50,12 +55,16 @@ class ClusterService extends Actor{
 }
 
 object ClusterService {
+  val terminate = new CountDownLatch(1)
+
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
     remote.start(hostname,port)
     remote.register(actorOf[ClusterService])
-    val localMaster = remote.actorFor(classOf[ClusterService].getCanonicalName,hostname,port)    
-
+    val localMaster = remote.actorFor(classOf[ClusterService].getCanonicalName, hostname, port)
     localMaster ! Announce(masterHostname, masterPort)
+    terminate.await()
+    registry.shutdownAll() // also stops ClusterService actor
+    remote.shutdown()
   }
 
   def main(args: Array[String]) {

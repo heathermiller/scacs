@@ -30,3 +30,5 @@ case class Nodes(addresses: List[(String, Int)])
  * @param clazz the class of the actor to be started
  */
 case class StartActorAt(host: String, port: Int, clazz: Class[_ <: Actor])
+
+case class StopServiceAt(host: String, port: Int)
