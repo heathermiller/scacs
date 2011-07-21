@@ -99,7 +99,7 @@ object MasterService {
     doneInit.await
   }
   
-  def shutdown = {
+  def shutdown() = {
     master !! Shutdown
     remote.shutdown()
     registry.shutdownAll()
@@ -139,7 +139,13 @@ object MasterService {
       sys.error("[ERROR: submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
   }
 
-  def retrieveFrom = sys.error("not implemented yet.")
+  //TODO: it would be nice to structure this such that T could be inferred
+  def retrieveFrom[T](node: (String, Int), trackingNumber: Int) = {
+    master !! RetrieveFrom(node._1, node._2, trackingNumber) match {
+      case Some(result) => result.asInstanceOf[T]
+      case None => sys.error("[EROR: retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
+    }
+  }
 
   //main used for testing only.
   def main(args: Array[String]) = {
