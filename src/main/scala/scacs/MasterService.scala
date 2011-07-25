@@ -28,7 +28,9 @@ class MasterService extends Actor {
 
       if (nodeRefs.size == numNodes) {
         println("[MasterService] all nodes have registered")
-        nodeRefs.values foreach { service => service !! Nodes(nodeRefs.keys.toList) }
+        nodeRefs.values foreach { service =>
+          service !! Nodes(nodeRefs.keys.toList)
+        }
         MasterService.doneInit.countDown()
       }
 
