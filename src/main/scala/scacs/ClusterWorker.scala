@@ -4,16 +4,14 @@ package scacs
 import scala.concurrent.SyncVar
 import akka.actor.ActorRef
 
-class ClusterWorker(localMaster: ClusterService, localMasterRef: ActorRef) extends Thread {
+class ClusterWorker(localMaster: ClusterService) extends Thread {
 
   import MasterService._
   
   var todo : SyncVar[((ClusterService,Any)=>Any, Any, Int)] = new SyncVar
+  //var buffers: 
 
   @volatile var shouldShutdown = false
-  
-  def putAt = sys.error("not implemented yet")
-  def getFrom = sys.error("not implemented yet")
   
   override def run = {
 	while (!shouldShutdown) {
@@ -25,7 +23,7 @@ class ClusterWorker(localMaster: ClusterService, localMasterRef: ActorRef) exten
 
 	  val msg = Result(trackingNumber, result)
 	  if (debug) println("[ClusterWorker] (class): sending " + msg + " to CS")
-	  localMasterRef ! msg
+	  localMaster.self ! msg
 	}
 	if (debug) println("[ClusterWorker] (class): terminating thread")
   }

@@ -9,6 +9,7 @@ class MasterService extends Actor {
   import MasterService._
   
   var numNodes = 0
+  var numBuffers = 0
   var nodeRefs: Map[(String, Int), ActorRef] = Map()
   var results: Map[Int, Any] = Map()
   var channels: Map[Int,Channel[Any]] = Map()
@@ -23,9 +24,10 @@ class MasterService extends Actor {
     }
   
   def receive = {
-    case ClusterSize(num) =>
-      numNodes = num
-      println("[MasterService] waiting for "+numNodes+" nodes to register")
+    case ClusterSize(numNodes, numBuffers) =>
+      this.numNodes = numNodes
+      this.numBuffers = numBuffers
+      println("[MasterService] waiting for "+this.numNodes+" nodes to register")
       self.reply()
 
     case Announce(newHost, newPort) =>
@@ -38,7 +40,7 @@ class MasterService extends Actor {
       
       if (nodeRefs.size == numNodes) {
         println("[MasterService] all nodes have registered")
-        nodeRefs.values foreach { service => service !! Nodes(nodeRefs.keys.toList) }
+        nodeRefs.values foreach { service => service !! InitializeClusterService(nodeRefs.keys.toList, numBuffers) }
         MasterService.doneInit.countDown()
       }
     
@@ -101,12 +103,12 @@ object MasterService {
     TrNumIncrementer
   }
 
-  def config(hostname: String, port: Int, numNodes: Int) = {
+  def config(hostname: String, port: Int, numNodes: Int, numBuffers: Int = 4) = {
     remote.start(hostname,port)
     remote.register(actorOf[MasterService])   
 
     master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
-    master !! ClusterSize(numNodes)
+    master !! ClusterSize(numNodes, numBuffers)
 
     doneInit.await
   }

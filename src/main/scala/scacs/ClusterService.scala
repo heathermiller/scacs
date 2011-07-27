@@ -10,17 +10,19 @@
 
 
 package scacs
+
 import akka.actor.{Actor, ActorRef, Channel}
 import Actor._
+import scala.concurrent.SyncVar
 
 class ClusterService extends Actor{
   
   import MasterService._
   
-  var allAddresses: List[(String, Int)] = List()
+//  var allAddresses: List[(String, Int)] = List()
   var data = Map[Int, (Option[Any], Any=>Unit)]()
   var master: ActorRef = null
-  var worker = new ClusterWorker(this, self)
+  var worker = new ClusterWorker(this) //add numBuffers to create
   val emptyFunction = (param: Any)=>{}
 
   def receive = {
@@ -30,9 +32,23 @@ class ClusterService extends Actor{
       val localport = remote.address.getPort()
       master ! Announce(localhost, localport) 
 
-    case Nodes(addresses) =>
+    case InitializeClusterService(addresses, numBuffers) =>
       println("[ClusterService] received node addresses: "+addresses)
-      allAddresses = addresses
+      
+      // build list of all (hostname,port)
+      //allAddresses = addresses
+      
+      // build array of with all ActorRefs
+      ClusterService.allActorRefs = Array.ofDim[ActorRef](addresses.length)
+      for (((host, port), i) <- addresses.zipWithIndex)
+        ClusterService.allActorRefs(i) = remote.actorFor(classOf[ClusterService].getCanonicalName,host,port)
+        
+      // create array of one-place buffers
+      ClusterService.allBuffers = Array.fill(numBuffers)(new SyncVar[Any])  
+      
+      // pass local ActorRef to ClusterService object
+      ClusterService.localActorRef = self
+      
       worker.start
       self.reply()
       
@@ -86,6 +102,7 @@ class ClusterService extends Actor{
       }
       
     case Shutdown =>
+      worker.shouldShutdown = true
       remote.shutdown()
       registry.shutdownAll() //this *should* also shutdown the worker actor.
       println("[ClusterService] EXIT. Shutting down.")
@@ -125,6 +142,29 @@ class ClusterService extends Actor{
 }
 
 object ClusterService {
+  
+  var allActorRefs: Array[ActorRef] = null
+  var allBuffers: Array[SyncVar[Any]] = null
+  var localActorRef: ActorRef = null
+  
+  def putAt(globalBufferNumber: Int, data: Any) = {
+    val (node, localBufferIndex) = locationOf(globalBufferNumber)
+    
+    //check whether global buffer is local or remote.
+    // handle local
+    // otherwise send PutAt message directly to remote  
+  }
+  
+  def getFrom = sys.error("not implemented yet")
+  
+  def isLocal(actorRef: ActorRef) : Boolean = actorRef.uuid == localActorRef.uuid
+  
+  //returns location of a specific one-place buffer, (ActorRef, localBufferNumber), given a globalBufferNumber
+  def locationOf(globalBufferNumber: Int): (ActorRef, Int) = {
+    val i = globalBufferNumber / allBuffers.length
+    val localBufferIndex = globalBufferNumber % allBuffers.length
+    (allActorRefs(i), localBufferIndex)
+  }
   
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
     
