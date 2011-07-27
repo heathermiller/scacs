@@ -87,10 +87,14 @@ class ClusterService extends Actor{
       println("[ClusterService] EXIT. Shutting down.")
       
     case Result(trackingNumber, input) => 
+      // data maps tracking numbers to pairs of (result, function)
+      // where function says what should be done when result comes in as new
       data.get(trackingNumber) match {
+        
         case None =>
           println("CS: received result for tn "+trackingNumber)
-          data += (trackingNumber -> (None, emptyFunction))          
+          data += (trackingNumber -> (Some(input), emptyFunction))          
+        
         case Some((dataOpt, fun)) =>
 	      if (!dataOpt.isEmpty) {
 	        /*do nothing*/

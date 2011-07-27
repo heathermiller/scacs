@@ -62,9 +62,11 @@ class MasterService extends Actor {
     case RetrieveFrom("", _, tracking) =>
       if ( results.contains(tracking) )
         self.reply(results(tracking))
-      else 
+      else { 
+        println("MS: queueing up request for tn "+tracking)
         channels += (tracking -> self.channel) // we're queueing up the request
-
+      }
+    
     case msg @ RetrieveFrom(host, port, tracking) if host != "" =>
       val nodeRef = getNode(host, port)
       self.reply((nodeRef !! msg).get)
@@ -114,6 +116,7 @@ object MasterService {
         val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
         val tn = newTrackingNumber
         tns = tn :: tns
+        println("MSO: sending SubmitAt to master with tn "+tn)
         master ! SubmitAt(hostname, port, internalFun, data, tn)
       }
       tns
@@ -158,12 +161,13 @@ object MasterService {
     val data = List(List(1,2,3))
     val fun = (list: List[Int]) => list.map { x => println(x); x + 1 }
 
-    //val tns = submitAt(nodes,data,fun)
-    val res = invokeAt(nodes,data,fun)
-    println(res)
-
-    //val res = retrieveFrom(nodes(0),tns(0))
+    val tns = submitAt(nodes, data, fun)
+    println("tns returned from submitAt: "+tns)
+    //val res = invokeAt(nodes,data,fun)
     //println(res)
+
+    val res = retrieveFrom(nodes(0), tns(0))
+    println(res)
 
     //val result = master !! RetrieveFrom("localhost", 8001, tns(0))
     //println(result)
