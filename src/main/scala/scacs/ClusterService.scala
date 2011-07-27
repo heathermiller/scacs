@@ -130,11 +130,18 @@ class ClusterService extends Actor{
 	      }
       }
       
-      
       val (dataOpt, fun) = data(trackingNumber)
       fun(input)
       data += (trackingNumber -> (Some(input), emptyFunction))
 
+    case PutAt(idx, item) =>       
+      ClusterService.allBuffers(idx).put(item)
+      self.reply()
+      
+    case GetFrom(idx) =>       
+      val item = ClusterService.allBuffers(idx).take()
+      self.reply(item)      
+      
     case _ =>
       println("[ClusterService] unknown message")
   }
@@ -143,6 +150,7 @@ class ClusterService extends Actor{
 
 object ClusterService {
   
+  // these fields are initialized by the ClusterService actor
   var allActorRefs: Array[ActorRef] = null
   var allBuffers: Array[SyncVar[Any]] = null
   var localActorRef: ActorRef = null
@@ -150,12 +158,29 @@ object ClusterService {
   def putAt(globalBufferNumber: Int, data: Any) = {
     val (node, localBufferIndex) = locationOf(globalBufferNumber)
     
-    //check whether global buffer is local or remote.
-    // handle local
-    // otherwise send PutAt message directly to remote  
+    // check whether buffer is local or remote
+    if (isLocal(node)) {
+      /* put directly in that local buffer */
+      allBuffers(localBufferIndex).put(data)
+    }
+    else {
+      // send PutAt message directly to remote ClusterService
+      node !! PutAt(localBufferIndex, data)
+    }
   }
   
-  def getFrom = sys.error("not implemented yet")
+  def getFrom(globalBufferNumber: Int): Any = {
+    val (node, localBufferIndex) = locationOf(globalBufferNumber)
+    // check whether buffer is local or remote
+    if (isLocal(node)) {
+      /* get directly from that local buffer */
+      allBuffers(localBufferIndex).take()
+    }
+    else {
+      // send PutAt message directly to remote ClusterService
+      node !! GetFrom(localBufferIndex)   
+    }
+  }
   
   def isLocal(actorRef: ActorRef) : Boolean = actorRef.uuid == localActorRef.uuid
   

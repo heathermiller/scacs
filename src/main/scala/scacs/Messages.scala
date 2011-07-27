@@ -117,5 +117,5 @@ case class PutAt(globalBufferNum: Int, data: Any)
  *
  * @param globalBufferNum The global buffer number to get from. 
  */
-case class GetAt(globalBufferNum: Int)
+case class GetFrom(globalBufferNum: Int)
 

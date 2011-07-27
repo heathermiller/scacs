@@ -169,12 +169,17 @@ object MasterService {
   def main(args: Array[String]) = {
     
     // this is how we configure the master, specify its hostname, its port, and the number of nodes in the cluster
-    MasterService.config("localhost", 8000, 1)
+    MasterService.config("localhost", 8000, 2)
 
+    
+    /*
+     * EXAMPLE #1 
+     * testing `submitAt` and `retrieveFrom`
+     */
     val nodes = List(("localhost",8001))
     val data = List(List(1,2,3))
     val fun = (list: List[Int]) => list.map { x => println(x); x + 1 }
-
+   
     val tns = submitAt(nodes, data, fun)
     println("[Program Output] MAIN: tns returned from submitAt: "+tns)
     //val res = invokeAt(nodes,data,fun)
@@ -183,9 +188,55 @@ object MasterService {
     val res = retrieveFrom[List[Int]](nodes(0), tns(0))
     println(res)
 
-    //val result = master !! RetrieveFrom("localhost", 8001, tns(0))
-    //println(result)
+    /*
+     * EXAMPLE #2 
+     * testing `getFrom` and `putAt` on one-place buffers remotely and locally
+     */
+    
+    val nodes2 = List(("localhost",8002))
+    
+    // this function waits for 2 secs and then gets an item from a local buffer
+    val localGetFun = (str: String) => {
+      Thread.sleep(2000)
+      
+      // assuming this is running on node 0
+      println("getting item from buffer 0")
+      val item = ClusterService.getFrom(0)
+      println(item)
+      
+      // return item
+      item
+    }
 
+    val tn1 = submitAt(nodes, List(""), localGetFun)
+    
+    
+    // this function puts an item into a buffer on a remote node
+    val remotePutFun = (str: String) => {
+      // assuming this is running on node 1
+      println("putting item into buffer 0")
+      ClusterService.putAt(0, 999)
+    }
+    
+    val tn2 = submitAt(nodes2, List(""), remotePutFun)
+    
+    val res2 = retrieveFrom[Int](nodes(0), tn1(0))
+    println(res2)
+    
+    /*
+    val localPutFun = {
+      // assuming this is running on node 1
+      ClusterService.putAt(4,999)
+    }
+    
+    val remoteGetFun  = (str: String) => {
+      // assuming this is running on node 0
+      val item = ClusterService.getFrom(4)
+      println(item)
+    }
+    */
+
+    
     MasterService.shutdown
 
 //    terminate.countDown()
