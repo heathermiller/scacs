@@ -81,6 +81,11 @@ class MasterService extends Actor {
       val response = recvd 
       if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+response+"to "+self)
       self.reply(response)
+      
+    case msg @ OperateOn(host, port, _, _, _) =>
+      if (debug) println("[MasterService] (class): sending OperateOn to "+host+":"+port)
+      val nodeRef = getNode(host, port)
+      nodeRef ! msg      
 
     case Shutdown =>
       nodeRefs.values foreach { service => service ! Shutdown }
@@ -164,12 +169,39 @@ object MasterService {
       case None => sys.error("[ERROR: MasterService.retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
     }
   }
+  
+  def operateOn[T](nodes: List[(String,Int)], fun: T=>Any, inPlace: Boolean, inputTrackingNums: List[Int]): List[Int] = {
+    // case 1: in-place update, result is overwritten remotely with same tracking numbers used as input
+    //    return input tracking numbers unchanged
+    // case 2: result is written to new tracking numbers generated here.
+    var opTns = List[Int]()
+      if (nodes.length == inputTrackingNums.length) {
+        for ((node,ipTn) <- nodes zip inputTrackingNums) {
+          val (hostname, port) = node
+          val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+          val opTn = if (inPlace) ipTn else newTrackingNumber 
+          opTns = opTn :: opTns
+          if (debug) println("[MasterService] (object): sending OperateOn to master with tn "+opTn)
+          master ! OperateOn(hostname, port, internalFun, ipTn, if (inPlace) None else Some(opTn))
+        }
+        opTns
+      } else 
+        sys.error("[ERROR: MasterService.operateOn] The number of nodes you'd like to submit a task to and the number of tracking numbers must be equal.")      
+  }
 
   //main used for testing only.
   def main(args: Array[String]) = {
     
     // this is how we configure the master, specify its hostname, its port, and the number of nodes in the cluster
     MasterService.config("localhost", 8000, 2)
+
+    
+   /*
+    *  OPEN QUESTIONS...
+    *  1) is it desirable to have nodes, etc, organized in Lists? i.e. so we can feed methods like
+    *     submitAt a list of nodes and data partitions that we'd like to submit to? Or is it better
+    *     to do this stuff one by one?
+    */
 
     
     /*
@@ -192,7 +224,7 @@ object MasterService {
      * EXAMPLE #2 
      * testing `getFrom` and `putAt` on one-place buffers remotely and locally
      */
-    
+    println("[Program Output] MAIN: testing one-place buffers")
     val nodes2 = List(("localhost",8002))
     
     // this function waits for 2 secs and then gets an item from a local buffer
@@ -222,19 +254,22 @@ object MasterService {
     
     val res2 = retrieveFrom[Int](nodes(0), tn1(0))
     println(res2)
-    
+    println("[Program Output] MAIN: DONE testing one-place buffers")
+
     /*
-    val localPutFun = {
-      // assuming this is running on node 1
-      ClusterService.putAt(4,999)
-    }
-    
-    val remoteGetFun  = (str: String) => {
-      // assuming this is running on node 0
-      val item = ClusterService.getFrom(4)
-      println(item)
-    }
-    */
+     * EXAMPLE #3 
+     * testing `operateOn`
+     */
+    println("[Program Output] MAIN: testing operateOn")
+   
+    val tn3 = operateOn(nodes, fun, false, tns)
+    println("[Program Output] MAIN: DONE testing operateOn")
+    println("[Program Output] MAIN: now retrieving result...")
+    val res3 = retrieveFrom[List[Int]](nodes(0), tn3(0))
+    println("[Program Output] MAIN: result retrieved.")    
+    println(res3)
+
+ 
 
     
     MasterService.shutdown

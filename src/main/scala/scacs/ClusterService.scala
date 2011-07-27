@@ -60,16 +60,43 @@ class ClusterService extends Actor{
     	case Some(trackingNumber) => trackingNumber
    		case None => inputTrackingNumber
       }
-      val (dataOpt, fun) = data(inputTrackingNumber)
+      
+      // this function should be called when the input becomes available
+      val onResult = (result: Any) => {
+        worker.todo.put((block, result, outputLocation))
+      }
+      
+      // obtain input for operation
+      // if the input is not yet available register the `onResult` function
+      data.get(inputTrackingNumber) match {
+        case None =>
+          data += (inputTrackingNumber -> (None, onResult))
+        
+        case Some((dataOpt, fun)) =>
+          if (!dataOpt.isEmpty)
+            worker.todo.put((block, dataOpt.get, outputLocation))
+          else
+            data += (inputTrackingNumber -> (None, onResult))
+      }
+      
+    // work to do on this  
+    case OperateOnAndGet(_, _, block, inputTrackingNumber) => 
+      /*
+      val onResult = (result: Any) => {
+    	worker.todo.put((block, result, outputLocation))
+      }
+          
+      data.get(inputTrackingNumber) match {
+        case None =>  
+      }
+      val (dataOpt, fun) = data()
       if (!dataOpt.isEmpty) worker.todo.put((block, dataOpt.get, outputLocation))
       else {
-        val onResult = (result: Any)=>
-          {
-            worker.todo.put((block, result, outputLocation))
-          }
+        
         data += (inputTrackingNumber -> (None, onResult))
-      }
-
+      }      
+	  */
+    
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
       if (!trackingNumber.isEmpty) {
@@ -80,7 +107,10 @@ class ClusterService extends Actor{
 
     case RetrieveFrom(_, _, trackingNumber) =>
       if (debug) println("[ClusterService] (class): recieved a RetrieveFrom message")
+      
+      // save ActorRef of sender
       val thisChannel = self.channel
+      // this function is called when result is insert into the data table
       val onResult = (result: Any) => {
         if (debug) println("[ClusterService] (class): sending result to channel "+thisChannel)
         thisChannel ! (trackingNumber, result)
@@ -89,7 +119,8 @@ class ClusterService extends Actor{
       data.get(trackingNumber) match {
         case None =>
           if (debug) println("[ClusterService] (class): no data under tn "+trackingNumber)
-          data += (trackingNumber -> (None, onResult))          
+          data += (trackingNumber -> (None, onResult))
+        
         case Some((dataOpt, fun)) =>
 	      if (!dataOpt.isEmpty) {
 	    	if (debug) println("[ClusterService] (class): responding with data "+dataOpt.get)

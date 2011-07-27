@@ -78,6 +78,20 @@ case class OperateOn(host: String, port: Int,
                   fun: (ClusterService,Any)=>Any,
                   inputTrackingNumber: Int,
                   outputTrackingNumber: Option[Int] = None)
+
+/**
+ * Message type used by {{MasterService}} for submitting a task to a node,
+ * when it expects to operate on data stored on that node via a tracking number,
+ * and then to retrieve that piece of data when its finished operating on it. 
+ *
+ * @param host The hostname of the {{ClusterService}} to submit to.
+ * @param port The port number of the {{ClusterService}} to submit to.
+ * @param fun The function to distribute.
+ * @param inputTrackingNumber The tracking number used by {{ClusterService}} for retrieving a local piece of data to operate on. 
+ */
+case class OperateOnAndGet(host: String, port: Int,
+                  fun: (ClusterService,Any)=>Any,
+                  inputTrackingNumber: Int)                  
                   
 /**
  * Message type used by {{MasterService}} for retrieving a piece of data from a node.
