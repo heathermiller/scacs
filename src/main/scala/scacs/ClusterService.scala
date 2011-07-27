@@ -10,13 +10,15 @@
 
 
 package scacs
-import akka.actor.{Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, Channel}
 import Actor._
 
 class ClusterService extends Actor{
   var allAddresses: List[(String, Int)] = List()
-  var data = Map[Int, Any]()
+  var data = Map[Int, (Option[Any], Any=>Unit)]()
   var master: ActorRef = null
+  var worker = new ClusterWorker(this)
+  val emptyFunction = (param: Any)=>{}
 
   def receive = {
     case Announce(hostname, port) => 
@@ -28,36 +30,84 @@ class ClusterService extends Actor{
     case Nodes(addresses) =>
       println("[ClusterService] received node addresses: "+addresses)
       allAddresses = addresses
+      worker.start
       self.reply()
+      
+    case SubmitAt(_, _, block, input, trackingNumber) => 
+      worker.todo.put((block, input, trackingNumber))
 
-    case Start(clazz) =>
-      println("[ClusterService] starting instance of "+clazz)
-      val newActor = actorOf(clazz).start()
-      remote.register(newActor)
-      newActor !! Nodes(allAddresses)
-      self.reply()
-
-    case SubmitAt(_, _, block, input, trackingNumber) =>
-      val result = block(this, input)
-      data += (trackingNumber.get -> result)
-      println("[ClusterService] stored result with tracking number "+trackingNumber.get)
+    case OperateOn(_, _, block, inputTrackingNumber, outputTrackingNumber) => 
+      val outputLocation = outputTrackingNumber match {
+    	case Some(trackingNumber) => trackingNumber
+   		case None => inputTrackingNumber
+      }
+      val (dataOpt, fun) = data(inputTrackingNumber)
+      if (!dataOpt.isEmpty) worker.todo.put((block, dataOpt.get, outputLocation))
+      else {
+        val onResult = (result: Any)=>
+          {
+            worker.todo.put((block, result, outputLocation))
+          }
+        data += (inputTrackingNumber -> (None, onResult))
+      }
 
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
       if (!trackingNumber.isEmpty) {
-        data += (trackingNumber.get -> result)
+        data += (trackingNumber.get -> (Some(result), emptyFunction))
         self.sender.get ! (trackingNumber.get, result)
       } else 
         self.reply(result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
-      val result = data(trackingNumber)
-      self.reply(result)
-
+      val thisChannel = self.channel
+      val onResult = (result: Any) => {
+        println("CS: sending result to channel "+thisChannel)
+        thisChannel ! result
+      }
+      
+      data.get(trackingNumber) match {
+        case None =>
+          println("CS: no data under tn "+trackingNumber)
+          data += (trackingNumber -> (None, onResult))          
+        case Some((dataOpt, fun)) =>
+	      if (!dataOpt.isEmpty) {
+	    	println("CS: responding with data "+dataOpt.get)
+	        self.reply(dataOpt.get) 
+	      }
+	      else {
+	        println("CS: dataOpt.isEmpty")
+	        data += (trackingNumber -> (None, onResult))     
+	      }
+      }
+      
     case Shutdown =>
       remote.shutdown()
-      registry.shutdownAll()
+      registry.shutdownAll() //this *should* also shutdown the worker actor.
       println("[ClusterService] EXIT. Shutting down.")
+      
+    case Result(trackingNumber, input) => 
+      data.get(trackingNumber) match {
+        case None =>
+          println("CS: received result for tn "+trackingNumber)
+          data += (trackingNumber -> (None, emptyFunction))          
+        case Some((dataOpt, fun)) =>
+	      if (!dataOpt.isEmpty) {
+	        /*do nothing*/
+	    	println("CS: result for tn already there: "+trackingNumber)
+	      }
+	      else {
+	        println("CS: received result for tn "+trackingNumber)
+	        data += (trackingNumber -> (Some(input), emptyFunction))
+	        println("CS: invoking callback function")
+	        fun(input)
+	      }
+      }
+      
+      
+      val (dataOpt, fun) = data(trackingNumber)
+      fun(input)
+      data += (trackingNumber -> (Some(input), emptyFunction))
 
     case _ =>
       println("[ClusterService] unknown message")

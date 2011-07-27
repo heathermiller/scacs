@@ -114,7 +114,7 @@ object MasterService {
         val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
         val tn = newTrackingNumber
         tns = tn :: tns
-        master ! SubmitAt(hostname, port, internalFun, data, Some(tn))
+        master ! SubmitAt(hostname, port, internalFun, data, tn)
       }
       tns
     } else 
@@ -136,14 +136,15 @@ object MasterService {
         res.get
       }
     } else 
-      sys.error("[ERROR: submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
+      sys.error("[ERROR: invokeAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
   }
 
   //TODO: it would be nice to structure this such that T could be inferred
+  //TODO: extend to list of nodes.
   def retrieveFrom[T](node: (String, Int), trackingNumber: Int) = {
     master !! RetrieveFrom(node._1, node._2, trackingNumber) match {
       case Some(result) => result.asInstanceOf[T]
-      case None => sys.error("[EROR: retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
+      case None => sys.error("[ERROR: retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
     }
   }
 
@@ -160,6 +161,9 @@ object MasterService {
     //val tns = submitAt(nodes,data,fun)
     val res = invokeAt(nodes,data,fun)
     println(res)
+
+    //val res = retrieveFrom(nodes(0),tns(0))
+    //println(res)
 
     //val result = master !! RetrieveFrom("localhost", 8001, tns(0))
     //println(result)
