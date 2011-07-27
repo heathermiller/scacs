@@ -6,6 +6,8 @@ import Actor._
 import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
+  import MasterService._
+  
   var numNodes = 0
   var nodeRefs: Map[(String, Int), ActorRef] = Map()
   var results: Map[Int, Any] = Map()
@@ -41,12 +43,12 @@ class MasterService extends Actor {
       }
     
     case msg @ SubmitAt(host, port, fun, input, tracking) =>
-      println("[MasterService] sending SubmitAt to "+host+":"+port)
+      if (debug) println("[MasterService] (class): sending SubmitAt to "+host+":"+port)
       val nodeRef = getNode(host, port)
       nodeRef ! msg
 
     case msg @ InvokeAt(host, port, fun, input, tracking) =>
-      println("[MasterService] sending InvokeAt to "+host+":"+port)
+      if (debug) println("[MasterService] (class): sending InvokeAt to "+host+":"+port)
       val nodeRef = getNode(host, port)
       nodeRef ! msg
 
@@ -60,16 +62,23 @@ class MasterService extends Actor {
         results += (trackingNumber -> result)  
     
     case RetrieveFrom("", _, tracking) =>
+      if (debug) println("[MasterService] (class): recieved a RetrieveFrom message, with empty hostname.")
       if ( results.contains(tracking) )
         self.reply(results(tracking))
       else { 
-        println("MS: queueing up request for tn "+tracking)
+        if (debug) println("[MasterService] (class): queueing up request for tn "+tracking)
         channels += (tracking -> self.channel) // we're queueing up the request
       }
     
     case msg @ RetrieveFrom(host, port, tracking) if host != "" =>
+      if (debug) println("[MasterService] (class): recieved a RetrieveFrom message, with non-empty hostname.")
       val nodeRef = getNode(host, port)
-      self.reply((nodeRef !! msg).get)
+      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+msg+"to "+nodeRef)
+      val Some((tn, recvd)) = nodeRef !! msg
+      
+      val response = recvd 
+      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+response+"to "+self)
+      self.reply(response)
 
     case Shutdown =>
       nodeRefs.values foreach { service => service ! Shutdown }
@@ -85,6 +94,7 @@ object MasterService {
   val doneInit = new CountDownLatch(1)
   var TrNumIncrementer = 0
   var master: ActorRef = null
+  var debug = false
 
   def newTrackingNumber = {
     TrNumIncrementer += 1
@@ -116,12 +126,12 @@ object MasterService {
         val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
         val tn = newTrackingNumber
         tns = tn :: tns
-        println("MSO: sending SubmitAt to master with tn "+tn)
+        if (debug) println("[MasterService] (object): sending SubmitAt to master with tn "+tn)
         master ! SubmitAt(hostname, port, internalFun, data, tn)
       }
       tns
     } else 
-      sys.error("[ERROR: submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
+      sys.error("[ERROR: MasterService.submitAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
   }
 
   def invokeAt[T](nodes: List[(String,Int)], partitionedData: List[T], fun: T=>Any): List[Any] = {
@@ -139,15 +149,17 @@ object MasterService {
         res.get
       }
     } else 
-      sys.error("[ERROR: invokeAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
+      sys.error("[ERROR: MasterService.invokeAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
   }
 
   //TODO: it would be nice to structure this such that T could be inferred
   //TODO: extend to list of nodes.
   def retrieveFrom[T](node: (String, Int), trackingNumber: Int) = {
-    master !! RetrieveFrom(node._1, node._2, trackingNumber) match {
+    val endResult = master !! RetrieveFrom(node._1, node._2, trackingNumber)
+    
+    endResult match {
       case Some(result) => result.asInstanceOf[T]
-      case None => sys.error("[ERROR: retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
+      case None => sys.error("[ERROR: MasterService.retrieveFrom] Data object " + trackingNumber + " could not be retrieved from " + node._1 + ":" + node._2)
     }
   }
 
@@ -162,11 +174,11 @@ object MasterService {
     val fun = (list: List[Int]) => list.map { x => println(x); x + 1 }
 
     val tns = submitAt(nodes, data, fun)
-    println("tns returned from submitAt: "+tns)
+    println("[Program Output] MAIN: tns returned from submitAt: "+tns)
     //val res = invokeAt(nodes,data,fun)
     //println(res)
 
-    val res = retrieveFrom(nodes(0), tns(0))
+    val res = retrieveFrom[List[Int]](nodes(0), tns(0))
     println(res)
 
     //val result = master !! RetrieveFrom("localhost", 8001, tns(0))

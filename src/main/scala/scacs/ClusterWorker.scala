@@ -2,9 +2,12 @@
 package scacs
 
 import scala.concurrent.SyncVar
+import akka.actor.ActorRef
 
-class ClusterWorker(localMaster: ClusterService) extends Thread {
+class ClusterWorker(localMaster: ClusterService, localMasterRef: ActorRef) extends Thread {
 
+  import MasterService._
+  
   var todo : SyncVar[((ClusterService,Any)=>Any, Any, Int)] = new SyncVar
 
   @volatile var shouldShutdown = false
@@ -14,17 +17,17 @@ class ClusterWorker(localMaster: ClusterService) extends Thread {
   
   override def run = {
 	while (!shouldShutdown) {
-	  println("CW: waiting for a new task")
-	  val (block, input, trackingNumber) = todo.take() //removes thing from SyncVar so it doesn't repeatedly take the same task
+	  if (debug) println("[ClusterWorker] (class): waiting for a new task")
+	  val (block, input, trackingNumber) = todo.take() 
 
-	  println("CW: executing code with result tn " + trackingNumber)
+	  if (debug) println("[ClusterWorker] (class): executing code with result tn " + trackingNumber)
 	  val result = block(localMaster, input)
 
 	  val msg = Result(trackingNumber, result)
-	  println("CW: sending " + msg + " to CS")
-	  localMaster.self ! msg
+	  if (debug) println("[ClusterWorker] (class): sending " + msg + " to CS")
+	  localMasterRef ! msg
 	}
-	println("CW: terminating thread")
+	if (debug) println("[ClusterWorker] (class): terminating thread")
   }
 
 }

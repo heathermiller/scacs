@@ -14,10 +14,13 @@ import akka.actor.{Actor, ActorRef, Channel}
 import Actor._
 
 class ClusterService extends Actor{
+  
+  import MasterService._
+  
   var allAddresses: List[(String, Int)] = List()
   var data = Map[Int, (Option[Any], Any=>Unit)]()
   var master: ActorRef = null
-  var worker = new ClusterWorker(this)
+  var worker = new ClusterWorker(this, self)
   val emptyFunction = (param: Any)=>{}
 
   def receive = {
@@ -60,23 +63,24 @@ class ClusterService extends Actor{
         self.reply(result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
+      if (debug) println("[ClusterService] (class): recieved a RetrieveFrom message")
       val thisChannel = self.channel
       val onResult = (result: Any) => {
-        println("CS: sending result to channel "+thisChannel)
-        thisChannel ! result
+        if (debug) println("[ClusterService] (class): sending result to channel "+thisChannel)
+        thisChannel ! (trackingNumber, result)
       }
       
       data.get(trackingNumber) match {
         case None =>
-          println("CS: no data under tn "+trackingNumber)
+          if (debug) println("[ClusterService] (class): no data under tn "+trackingNumber)
           data += (trackingNumber -> (None, onResult))          
         case Some((dataOpt, fun)) =>
 	      if (!dataOpt.isEmpty) {
-	    	println("CS: responding with data "+dataOpt.get)
+	    	if (debug) println("[ClusterService] (class): responding with data "+dataOpt.get)
 	        self.reply(dataOpt.get) 
 	      }
 	      else {
-	        println("CS: dataOpt.isEmpty")
+	        if (debug) println("[ClusterService] (class): dataOpt.isEmpty")
 	        data += (trackingNumber -> (None, onResult))     
 	      }
       }
@@ -89,21 +93,22 @@ class ClusterService extends Actor{
     case Result(trackingNumber, input) => 
       // data maps tracking numbers to pairs of (result, function)
       // where function says what should be done when result comes in as new
+      if (debug) println("[ClusterService] (class): received a Result message")
       data.get(trackingNumber) match {
         
         case None =>
-          println("CS: received result for tn "+trackingNumber)
+          if (debug) println("[ClusterService] (class): received result for tn "+trackingNumber)
           data += (trackingNumber -> (Some(input), emptyFunction))          
         
         case Some((dataOpt, fun)) =>
 	      if (!dataOpt.isEmpty) {
 	        /*do nothing*/
-	    	println("CS: result for tn already there: "+trackingNumber)
+	    	if (debug) println("[ClusterService] (class): result for tn already there: "+trackingNumber)
 	      }
 	      else {
-	        println("CS: received result for tn "+trackingNumber)
+	        if (debug) println("[ClusterService] (class): received result for tn "+trackingNumber)
 	        data += (trackingNumber -> (Some(input), emptyFunction))
-	        println("CS: invoking callback function")
+	        if (debug) println("[ClusterService] (class): invoking callback function")
 	        fun(input)
 	      }
       }
