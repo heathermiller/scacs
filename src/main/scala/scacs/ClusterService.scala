@@ -75,27 +75,32 @@ class ClusterService extends Actor{
         case Some((dataOpt, fun)) =>
           if (!dataOpt.isEmpty)
             worker.todo.put((block, dataOpt.get, outputLocation))
-          else
-            data += (inputTrackingNumber -> (None, onResult))
       }
       
-    // work to do on this  
-    case OperateOnAndGet(_, _, block, inputTrackingNumber) => 
-      /*
+    case OperateOnAndGet(_, _, block, inputTrackingNumber,outputTrackingNumber) => 
+      
+      // this function should be called when the input becomes available
       val onResult = (result: Any) => {
-    	worker.todo.put((block, result, outputLocation))
+        worker.todo.put((block, result, outputTrackingNumber))
       }
-          
-      data.get(inputTrackingNumber) match {
-        case None =>  
-      }
-      val (dataOpt, fun) = data()
-      if (!dataOpt.isEmpty) worker.todo.put((block, dataOpt.get, outputLocation))
-      else {
-        
-        data += (inputTrackingNumber -> (None, onResult))
+      // this function should be called when the output becomes available
+      val thisChannel = self.channel // save ActorRef of sender
+      val onOutput = (result: Any) => {
+        if (debug) println("[ClusterService] (class), in OperateOnAndGet: sending result: "+result+" to channel "+thisChannel)
+        thisChannel ! (outputTrackingNumber, result)
       }      
-	  */
+      data += ( outputTrackingNumber -> (None, onOutput))
+      
+      // obtain input for operation
+      // if the input is not yet available register the `onResult` function
+      data.get(inputTrackingNumber) match {
+        case None =>
+          data += (inputTrackingNumber -> (None, onResult))
+        
+        case Some((dataOpt, fun)) =>
+          if (!dataOpt.isEmpty)
+            worker.todo.put((block, dataOpt.get, outputTrackingNumber))
+      }
     
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
@@ -138,10 +143,10 @@ class ClusterService extends Actor{
       registry.shutdownAll() //this *should* also shutdown the worker actor.
       println("[ClusterService] EXIT. Shutting down.")
       
-    case Result(trackingNumber, input) => 
+    case msg@ Result(trackingNumber, input) => 
       // data maps tracking numbers to pairs of (result, function)
       // where function says what should be done when result comes in as new
-      if (debug) println("[ClusterService] (class): received a Result message")
+      if (debug) println("[ClusterService] (class): received a Result message: "+msg)
       data.get(trackingNumber) match {
         
         case None =>

@@ -85,6 +85,11 @@ class MasterService extends Actor {
     case msg @ OperateOn(host, port, _, _, _) =>
       if (debug) println("[MasterService] (class): sending OperateOn to "+host+":"+port)
       val nodeRef = getNode(host, port)
+      nodeRef ! msg
+      
+    case msg @ OperateOnAndGet(host, port, _, _, _) =>
+      if (debug) println("[MasterService] (class): sending OperateOnAndGet to "+host+":"+port)
+      val nodeRef = getNode(host, port)
       nodeRef ! msg      
 
     case Shutdown =>
@@ -189,6 +194,27 @@ object MasterService {
         sys.error("[ERROR: MasterService.operateOn] The number of nodes you'd like to submit a task to and the number of tracking numbers must be equal.")      
   }
 
+  
+  def operateOnAndGet[T](nodes: List[(String,Int)], fun: T=>Any, inputTrackingNums: List[Int]): List[Any] = {
+    var opTns = List[Int]()
+    if (nodes.length == inputTrackingNums.length) {
+        for ((node,ipTn) <- nodes zip inputTrackingNums) {
+          val (hostname, port) = node
+          val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+          val opTn = newTrackingNumber
+          opTns = opTn :: opTns
+          if (debug) println("[MasterService] (object): sending OperateOnAndGet to master with tn "+opTn)
+          master ! OperateOnAndGet(hostname, port, internalFun, ipTn, opTn)
+        }
+        for (tn <- opTns) yield {
+          val Some((trNum, res))= master !! RetrieveFrom("", 0, tn)
+          res
+        }        
+      } else 
+        sys.error("[ERROR: MasterService.operateOnAndGet] The number of nodes you'd like to submit a task to and the number of tracking numbers must be equal.")      
+  }  
+  
+  
   //main used for testing only.
   def main(args: Array[String]) = {
     
@@ -269,7 +295,15 @@ object MasterService {
     println("[Program Output] MAIN: result retrieved.")    
     println(res3)
 
- 
+    /*
+     * EXAMPLE #4 
+     * testing `operateOnAndGet`
+     */
+    println("[Program Output] MAIN: testing operateOnAndGet")
+   
+    val res4 = operateOnAndGet(nodes, fun, tns)
+    println("[Program Output] MAIN: DONE testing operateOn. Result:")
+    println(res4)
 
     
     MasterService.shutdown
