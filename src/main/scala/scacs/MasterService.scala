@@ -1,4 +1,3 @@
-
 package scacs
 
 import akka.actor.{Actor, ActorRef}
@@ -10,14 +9,14 @@ class MasterService extends Actor {
   var nodeRefs: Map[(String, Int), ActorRef] = Map()
   
   def receive = {
-    case ClusterSize(num) =>
-      numNodes = num
-      println("[MasterService] waiting for "+
-        numNodes+" nodes to register")
+    case ClusterSize(numNodes) =>
+      this.numNodes = numNodes
+      println("[Master] waiting for "+numNodes+
+              " nodes to register")
       self.reply()
 
     case Announce(newHost, newPort) =>
-      println("[MasterService] new host "+
+      println("[Master] new host "+
         newHost+":"+newPort)
       val nodeRef = remote.actorFor(
         classOf[ClusterService].getCanonicalName,
@@ -27,7 +26,7 @@ class MasterService extends Actor {
       nodeRefs += ((newHost, newPort) -> nodeRef)
 
       if (nodeRefs.size == numNodes) {
-        println("[MasterService] all nodes have registered")
+        println("[Master] all nodes have registered")
         nodeRefs.values foreach { service =>
           service !! Nodes(nodeRefs.keys.toList)
         }
@@ -47,15 +46,11 @@ class MasterService extends Actor {
       self.reply()
 
     case _ =>
-      println("[MasterService] unknown message")
+      println("[Master] unknown message")
   }
-
-  // whenever MasterService actor terminates, the whole remote service should shut down.
-  override def postStop() = MasterService.terminate.countDown()
 }
 
 object MasterService {
-  val terminate = new CountDownLatch(1)
   val doneInit = new CountDownLatch(1)
 
   def main(args: Array[String]) = {
@@ -64,9 +59,10 @@ object MasterService {
     val numNodes = args(2).toInt
     
     remote.start(hostname, port)
-    remote.register(actorOf[MasterService])
-
-    val master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
+    
+    val master = actorOf[MasterService].start()
+    remote.register(master)
+    
     master !! ClusterSize(numNodes)
     doneInit.await()
 
@@ -78,11 +74,9 @@ object MasterService {
 
     master !! StopServiceAt("localhost", 9001)
 
-    //terminate.await()
-    println("[EXIT: MasterService] Shutting down.")
+    println("[Master] shutting down")
     registry.shutdownAll()
     remote.shutdown()
-    println("[EXIT: MasterService] Done.")
   }
 
 }

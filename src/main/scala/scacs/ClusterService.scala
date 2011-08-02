@@ -1,20 +1,3 @@
-/*
- * TODO:
- * 1) start akka remote source on <hostname,port>
- * 2) start a remote actor (ClusterService Actor)
- *   a) allow other actors to be started locally
- *   b) receive info of all neighbors.
- * 3) start custom remote actor
- *   a) needs acces to info of all neighbors
- *      - either local message from ClusterService Actor (what we'll do now)
- *      - or message from Master Actor somehow
- */
-/*
- * (Intended) Steps to get it running...
- * 1) start MasterService
- * 2) start ClusterService on each node
- */
-
 package scacs
 
 import akka.actor.{Actor, ActorRef}
@@ -62,11 +45,13 @@ object ClusterService {
 
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
     remote.start(hostname, port)
-    remote.register(actorOf[ClusterService])
-    val localMaster = remote.actorFor(classOf[ClusterService].getCanonicalName, hostname, port)
-    localMaster ! Announce(masterHostname, masterPort)
+    
+    val service = actorOf[ClusterService].start()
+    remote.register(service)
+    
+    service ! Announce(masterHostname, masterPort)
     terminate.await()
-    registry.shutdownAll() // also stops ClusterService actor
+    registry.shutdownAll() // also stops service actor
     remote.shutdown()
   }
 
