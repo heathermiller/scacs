@@ -205,16 +205,16 @@ object ClusterService {
     }
   }
   
-  def getFrom(globalBufferNumber: Int): Any = {
+  def getFrom[T](globalBufferNumber: Int): T = {
     val (node, localBufferIndex) = locationOf(globalBufferNumber)
     // check whether buffer is local or remote
     if (isLocal(node)) {
       /* get directly from that local buffer */
-      allBuffers(localBufferIndex).take()
+      allBuffers(localBufferIndex).take().asInstanceOf[T]
     }
     else {
       // send PutAt message directly to remote ClusterService
-      node !! GetFrom(localBufferIndex)   
+      (node !! GetFrom(localBufferIndex)).asInstanceOf[T]
     }
   }
   
