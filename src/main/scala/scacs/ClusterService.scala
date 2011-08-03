@@ -2,6 +2,7 @@ package scacs
 
 import akka.actor.{Actor, ActorRef}
 import Actor._
+import cluster._
 import java.util.concurrent.CountDownLatch
 
 class ClusterService extends Actor {
@@ -10,12 +11,12 @@ class ClusterService extends Actor {
   
   def receive = {
     case Announce(hostname, port) =>
-      master = remote.actorFor(
+      master = remoteService.actorFor(
         classOf[MasterService].getCanonicalName,
         hostname,
         port)
-      val localhost = remote.address.getHostName()
-      val localport = remote.address.getPort()
+      val localhost = remoteService.address.getHostName()
+      val localport = remoteService.address.getPort()
       master ! Announce(localhost, localport)
 
     case Nodes(addresses) =>
@@ -26,8 +27,8 @@ class ClusterService extends Actor {
     case StartActorAt(_, _, clazz) =>
       println("[ClusterService] starting instance of "+clazz)
       val newActor = actorOf(clazz).start()
-      remote.register(newActor)
-      newActor !! Nodes(allAddresses)
+      remoteService.register(newActor)
+      (newActor ? Nodes(allAddresses)).await
       self.reply()
 
     case StopServiceAt(_, _) =>
@@ -44,15 +45,14 @@ object ClusterService {
   val terminate = new CountDownLatch(1)
 
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
-    remote.start(hostname, port)
+    remoteService.start(hostname, port)
     
     val service = actorOf[ClusterService].start()
-    remote.register(service)
+    remoteService.register(service)
     
     service ! Announce(masterHostname, masterPort)
     terminate.await()
-    registry.shutdownAll() // also stops service actor
-    remote.shutdown()
+    remoteService.shutdown()
   }
 
   def main(args: Array[String]) {

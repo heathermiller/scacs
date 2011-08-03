@@ -2,6 +2,7 @@ package scacs
 
 import akka.actor.{Actor, ActorRef}
 import Actor._
+import cluster._
 import java.util.concurrent.CountDownLatch
 
 class MasterService extends Actor {
@@ -18,7 +19,7 @@ class MasterService extends Actor {
     case Announce(newHost, newPort) =>
       println("[Master] new host "+
         newHost+":"+newPort)
-      val nodeRef = remote.actorFor(
+      val nodeRef = remoteService.actorFor(
         classOf[ClusterService].getCanonicalName,
         newHost,
         newPort)
@@ -28,21 +29,21 @@ class MasterService extends Actor {
       if (nodeRefs.size == numNodes) {
         println("[Master] all nodes have registered")
         nodeRefs.values foreach { service =>
-          service !! Nodes(nodeRefs.keys.toList)
+          (service ? Nodes(nodeRefs.keys.toList)).await
         }
         MasterService.doneInit.countDown()
       }
 
     case startMsg @ StartActorAt(host, port, clazz) =>
-      nodeRefs((host, port)) !! startMsg
-      val startedActor = remote.actorFor(
+      (nodeRefs((host, port)) ? startMsg).await
+      val startedActor = remoteService.actorFor(
         clazz.getCanonicalName,
         host,
         port)
       self.reply(startedActor)
 
     case stopMsg @ StopServiceAt(host, port) =>
-      nodeRefs((host, port)) !! stopMsg
+      (nodeRefs((host, port)) ? stopMsg).await
       self.reply()
 
     case _ =>
@@ -58,25 +59,24 @@ object MasterService {
     val port = args(1).toInt
     val numNodes = args(2).toInt
     
-    remote.start(hostname, port)
+    remoteService.start(hostname, port)
     
     val master = actorOf[MasterService].start()
-    remote.register(master)
+    remoteService.register(master)
     
-    master !! ClusterSize(numNodes)
+    (master ? ClusterSize(numNodes)).await
     doneInit.await()
 
     // remotely start EchoActor
     val response =
-      master !! StartActorAt("localhost", 9001, classOf[EchoActor])
+      (master ? StartActorAt("localhost", 9001, classOf[EchoActor])).await
     val echoActor = response.get.asInstanceOf[ActorRef]
-    println(echoActor !! "hello")
+    println((echoActor ? "hello").await)
 
-    master !! StopServiceAt("localhost", 9001)
+    (master ? StopServiceAt("localhost", 9001)).await
 
     println("[Master] shutting down")
-    registry.shutdownAll()
-    remote.shutdown()
+    remoteService.shutdown()
   }
 
 }

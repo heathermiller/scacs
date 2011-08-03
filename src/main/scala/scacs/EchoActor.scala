@@ -1,7 +1,7 @@
 package scacs
 
 import akka.actor.{Actor, ActorRef}
-import Actor.remote
+import Actor.cluster.remoteService
 
 class EchoActor extends Actor {
   var neighbors: List[ActorRef] = List()
@@ -11,7 +11,7 @@ class EchoActor extends Actor {
     case Nodes(addresses) =>
       allAddresses = addresses
       neighbors = addresses map { case (hostname, port) =>
-        remote.actorFor(classOf[ClusterService].getCanonicalName,
+        remoteService.actorFor(classOf[ClusterService].getCanonicalName,
           hostname,
           port)
       }
