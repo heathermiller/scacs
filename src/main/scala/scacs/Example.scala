@@ -1,4 +1,6 @@
 
+//Note, I have been doing testing in MasterService main, so this example is likely broken.
+
 import scacs._
 
 object Example {
@@ -26,8 +28,8 @@ object Example {
     //val tns = submitAt(nodes,data,fun) 
 
     //send instructions to nodes, and recieve result of fun (not the tracking numbers of the data chunks!)
-    val res = MasterService.invokeAt(nodes,data,fun) 
-    println(res)
+    //val res = MasterService.invokeAt(nodes,data,fun) 
+    //println(res)
 
     /* this is only necessary with submitAt. Note: I'll turn this
      * into a method, retrieveFrom, very very soon.

@@ -39,9 +39,9 @@ class ClusterService extends Actor{
       //allAddresses = addresses
       
       // build array of with all ActorRefs
-      ClusterService.allActorRefs = Array.ofDim[ActorRef](addresses.length)
+      ClusterService.nodes = Array.ofDim[ActorRef](addresses.length)
       for (((host, port), i) <- addresses.zipWithIndex)
-        ClusterService.allActorRefs(i) = remote.actorFor(classOf[ClusterService].getCanonicalName,host,port)
+        ClusterService.nodes(i) = remote.actorFor(classOf[ClusterService].getCanonicalName,host,port)
         
       // create array of one-place buffers
       ClusterService.allBuffers = Array.fill(numBuffers)(new SyncVar[Any])  
@@ -104,11 +104,8 @@ class ClusterService extends Actor{
     
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(this, input)
-      if (!trackingNumber.isEmpty) {
-        data += (trackingNumber.get -> (Some(result), emptyFunction))
-        self.sender.get ! (trackingNumber.get, result)
-      } else 
-        self.reply(result)
+      data += (trackingNumber -> (Some(result), emptyFunction))
+      self.sender.get ! (trackingNumber, result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
       if (debug) println("[ClusterService] (class): recieved a RetrieveFrom message")
@@ -187,7 +184,7 @@ class ClusterService extends Actor{
 object ClusterService {
   
   // these fields are initialized by the ClusterService actor
-  var allActorRefs: Array[ActorRef] = null
+  var nodes: Array[ActorRef] = null
   var allBuffers: Array[SyncVar[Any]] = null
   var localActorRef: ActorRef = null
   
@@ -224,7 +221,7 @@ object ClusterService {
   def locationOf(globalBufferNumber: Int): (ActorRef, Int) = {
     val i = globalBufferNumber / allBuffers.length
     val localBufferIndex = globalBufferNumber % allBuffers.length
-    (allActorRefs(i), localBufferIndex)
+    (nodes(i), localBufferIndex)
   }
   
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
