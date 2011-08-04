@@ -360,7 +360,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       
       // assuming this is running on node 0
       println("getting item from buffer 0")
-      val item = ClusterService.getFrom[Int](0)
+      val item = ClusterService.getFrom[Int](0,0)
       println(item)
       
       // return item
@@ -373,7 +373,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     val remotePutFun = (str: String) => {
       // assuming this is running on node 1
       println("putting item into buffer 0")
-      ClusterService.putAt(0, 999)
+      ClusterService.putAt(0,0, 999)
     }
     
     val tn2 = submitAt(appNodes2, "", remotePutFun)

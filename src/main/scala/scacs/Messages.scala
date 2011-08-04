@@ -122,16 +122,16 @@ case class Result(trackingNumber: Int, result: Any)
  * Message type used by {{ClusterWorker}} to notify its {{ClusterService}} to 
  * perform a `putAt` on a remote {{ClusterService}}.
  *
- * @param globalBufferNum The global buffer number to put `data` on.
+ * @param localBufferNum The local buffer number to put `data` on.
  * @param result The data to be put into `globalBufferNum`. 
  */
-case class PutAt(globalBufferNum: Int, data: Any)
+case class PutAt(localBufferNum: Int, data: Any)
 
 /**
  * Message type used by {{ClusterWorker}} to notify its {{ClusterService}} to 
  * perform a `getFrom` on a remote {{ClusterService}}.
  *
- * @param globalBufferNum The global buffer number to get from. 
+ * @param localBufferNum The local buffer number to get from. 
  */
-case class GetFrom(globalBufferNum: Int)
+case class GetFrom(localBufferNum: Int)
 

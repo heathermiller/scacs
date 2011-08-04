@@ -188,41 +188,40 @@ object ClusterService {
   var allBuffers: Array[SyncVar[Any]] = null
   var localActorRef: ActorRef = null
   
-  def putAt(globalBufferNumber: Int, data: Any) = {
-    val (node, localBufferIndex) = locationOf(globalBufferNumber)
-    
+  def putAt(i: Int, buffer: Int, data: Any) = {
     // check whether buffer is local or remote
-    if (isLocal(node)) {
+    if (isLocal(nodes(i))) {
       /* put directly in that local buffer */
-      allBuffers(localBufferIndex).put(data)
+      allBuffers(buffer).put(data)
     }
     else {
       // send PutAt message directly to remote ClusterService
-      node !! PutAt(localBufferIndex, data)
+      nodes(i) !! PutAt(buffer, data)
     }
   }
   
-  def getFrom[T](globalBufferNumber: Int): T = {
-    val (node, localBufferIndex) = locationOf(globalBufferNumber)
+  def getFrom[T](i: Int, buffer: Int): T = {
     // check whether buffer is local or remote
-    if (isLocal(node)) {
+    if (isLocal(nodes(i))) {
       /* get directly from that local buffer */
-      allBuffers(localBufferIndex).take().asInstanceOf[T]
+      allBuffers(buffer).take().asInstanceOf[T]
     }
     else {
       // send PutAt message directly to remote ClusterService
-      (node !! GetFrom(localBufferIndex)).asInstanceOf[T]
+      (nodes(i) !! GetFrom(buffer)).asInstanceOf[T]
     }
   }
   
   def isLocal(actorRef: ActorRef) : Boolean = actorRef.uuid == localActorRef.uuid
   
+  /*
   //returns location of a specific one-place buffer, (ActorRef, localBufferNumber), given a globalBufferNumber
   def locationOf(globalBufferNumber: Int): (ActorRef, Int) = {
     val i = globalBufferNumber / allBuffers.length
     val localBufferIndex = globalBufferNumber % allBuffers.length
     (nodes(i), localBufferIndex)
   }
+  */
   
   def run(masterHostname: String, masterPort: Int, hostname: String, port: Int) {
     
