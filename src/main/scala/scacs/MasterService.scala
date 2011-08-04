@@ -163,7 +163,7 @@ object MasterService {
   def submitAt[T](i: Int, data: T, fun: T=>Any): Int = {
     // "One" variant of submitAt
     val (host, port) = addresses(i)
-    val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+    val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val tn = newTrackingNumber
     if (debug) println("[MasterService] (object): sending SubmitAt to master with tn "+tn)
     master ! SubmitAt(host, port, internalFun, data, tn)
@@ -198,7 +198,7 @@ object MasterService {
   def invokeAt[T](i: Int, data: T, fun: T=>Any): Any = {
     // "One" variant of invokeAt (Note: due to async receive of results, can't do this one/some/all recursively)
     val (host, port) = addresses(i)
-    val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+    val internalFun = (data: Any)=> fun(data.asInstanceOf[T])
     val tn = newTrackingNumber
     if (debug) println("[MasterService] (object): sending InvokeAt(One) to master with tn "+tn)
     master ! InvokeAt(host, port, internalFun, data, tn)
@@ -214,7 +214,7 @@ object MasterService {
     if (someNodes.length == partitionedData.length) {
       for ((node,data) <- someNodes zip partitionedData) {
         val (hostname, port) = addresses(node)
-        val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+        val internalFun = (data: Any) => fun(data.asInstanceOf[T])
         val tn = newTrackingNumber
         tns = tn :: tns
         if (debug) println("[MasterService] (object): sending InvokeAt(Some) to master with tn "+tn)
@@ -255,7 +255,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     //    return input tracking numbers unchanged
     // case 2: result is written to new tracking numbers generated here.
     val (host, port) = addresses(i)
-    val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+    val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val outputTn = if (inPlace) inputTn else newTrackingNumber
     if (debug) println("[MasterService] (object): sending OperateOn to master with tn "+outputTn)
     master ! OperateOn(host, port, internalFun, inputTn, if (inPlace) None else Some(outputTn))
@@ -284,7 +284,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
   def operateOnAndGet[T](i: Int, fun: T=>Any, inputTn: Int): Any = {
     // "One" variant of operateOnAndGet    
     val (host, port) = addresses(i)
-    val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+    val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val outputTn = newTrackingNumber
     if (debug) println("[MasterService] (object): sending OperateOnAndGet(One) to master with tn "+outputTn)
     master ! OperateOnAndGet(host, port, internalFun, inputTn, outputTn)
@@ -299,7 +299,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     if (someNodes.length == inputTrackingNums.length) {
         for ((node,inputTn) <- someNodes zip inputTrackingNums) {
           val (hostname, port) = addresses(node)
-          val internalFun = (cs: ClusterService, data: Any) => fun(data.asInstanceOf[T])
+          val internalFun = (data: Any) => fun(data.asInstanceOf[T])
           val outputTn = newTrackingNumber
           outputTns = outputTn :: outputTns
           if (debug) println("[MasterService] (object): sending OperateOnAndGet(Some) to master with tn "+outputTn)
@@ -331,7 +331,8 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
      * EXAMPLE #1 
      * testing `submitAt`, `retrieveFrom`, and `invokeAt`
      */
-    val appNodes = 0 //List(("localhost",8001)) //replacing this with nodes(whatever) instead
+    
+    val appNodes = 0 // List(("localhost",8001)) //replacing this with nodes(whatever) instead
     val data = List(1,2,3) //List(List(1,2,3))
     val fun = (list: List[Int]) => list.map { x => println(x); x + 1 }
     println("[Program Output] MAIN: nodes: "+nodes.mkString(","))
@@ -345,13 +346,13 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
 
     //val res = retrieveFrom[List[Int]](("localhost", 8001), tn) // need to fix this
     //println("[Program Output] MAIN: Resulted obtained by calling retrieveFrom on "+tn+": "+res)
-
+    
     /*
      * EXAMPLE #2 
      * testing `getFrom` and `putAt` on one-place buffers remotely and locally
      */
     println("[Program Output] MAIN: testing one-place buffers")
-    val appNodes2 = 1//List(("localhost",8002))
+    val appNodes2 = 1 // List(("localhost",8002))
     
     // this function waits for 2 secs and then gets an item from a local buffer
     val localGetFun = (str: String) => {
@@ -359,7 +360,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       
       // assuming this is running on node 0
       println("getting item from buffer 0")
-      val item = ClusterService.getFrom(0)
+      val item = ClusterService.getFrom[Int](0)
       println(item)
       
       // return item
@@ -367,7 +368,6 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     }
 
     val tn1 = submitAt(appNodes, "", localGetFun)
-    
     
     // this function puts an item into a buffer on a remote node
     val remotePutFun = (str: String) => {

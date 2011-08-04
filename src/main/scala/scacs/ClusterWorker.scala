@@ -8,7 +8,7 @@ class ClusterWorker(localMaster: ClusterService) extends Thread {
 
   import MasterService._
   
-  var todo : SyncVar[((ClusterService,Any)=>Any, Any, Int)] = new SyncVar
+  var todo : SyncVar[(Any => Any, Any, Int)] = new SyncVar
   //var buffers: 
 
   @volatile var shouldShutdown = false
@@ -19,7 +19,7 @@ class ClusterWorker(localMaster: ClusterService) extends Thread {
 	  val (block, input, trackingNumber) = todo.take() 
 
 	  if (debug) println("[ClusterWorker] (class): executing code with result tn " + trackingNumber)
-	  val result = block(localMaster, input)
+	  val result = block(input)
 
 	  val msg = Result(trackingNumber, result)
 	  if (debug) println("[ClusterWorker] (class): sending " + msg + " to CS")

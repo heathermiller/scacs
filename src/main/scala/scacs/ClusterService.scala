@@ -103,12 +103,12 @@ class ClusterService extends Actor{
       }
     
     case InvokeAt(_, _, block, input, trackingNumber) =>
-      val result = block(this, input)
+      val result = block(input)
       data += (trackingNumber -> (Some(result), emptyFunction))
       self.sender.get ! (trackingNumber, result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
-      if (debug) println("[ClusterService] (class): recieved a RetrieveFrom message")
+      if (debug) println("[ClusterService] (class): received a RetrieveFrom message")
       
       // save ActorRef of sender
       val thisChannel = self.channel
