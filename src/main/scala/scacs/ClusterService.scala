@@ -32,7 +32,7 @@ class ClusterService extends Actor{
       val localport = remote.address.getPort()
       master ! Announce(localhost, localport) 
 
-    case InitializeClusterService(addresses, numBuffers) =>
+    case InitializeClusterService(addresses, maxConsumers, bufferMultiplier) =>
       println("[ClusterService] received node addresses: "+addresses)
       
       // build list of all (hostname,port)
@@ -43,8 +43,13 @@ class ClusterService extends Actor{
       for (((host, port), i) <- addresses.zipWithIndex)
         ClusterService.nodes(i) = remote.actorFor(classOf[ClusterService].getCanonicalName,host,port)
         
-      // create array of one-place buffers
-      ClusterService.allBuffers = Array.fill(numBuffers)(new SyncVar[Any])  
+      // create array of multi-buffers
+      var idx = 0  
+      ClusterService.allBuffers = Array.ofDim(maxConsumers * bufferMultiplier)
+      for (i <- 1 to bufferMultiplier; numConsumers <- 1 to maxConsumers) {
+        ClusterService.allBuffers(idx) = new MultiBuffer(numConsumers)//Array.fill(maxConsumers * bufferMultiplier)(new SyncVar[Any])
+        idx += 1
+      }  
       
       // pass local ActorRef to ClusterService object
       ClusterService.localActorRef = self
@@ -171,8 +176,8 @@ class ClusterService extends Actor{
       ClusterService.allBuffers(idx).put(item)
       self.reply()
       
-    case GetFrom(idx) =>       
-      val item = ClusterService.allBuffers(idx).take()
+    case GetFrom(bufferIndex, consumerIndex) =>       
+      val item = ClusterService.allBuffers(bufferIndex).get(consumerIndex)
       self.reply(item)      
       
     case _ =>
@@ -185,7 +190,7 @@ object ClusterService {
   
   // these fields are initialized by the ClusterService actor
   var nodes: Array[ActorRef] = null
-  var allBuffers: Array[SyncVar[Any]] = null
+  var allBuffers: Array[MultiBuffer[Any]] = null
   var localActorRef: ActorRef = null
   
   def putAt(i: Int, buffer: Int, data: Any) = {
@@ -200,15 +205,15 @@ object ClusterService {
     }
   }
   
-  def getFrom[T](i: Int, buffer: Int): T = {
+  def getFrom[T](i: Int, buffer: Int, consumer: Int): T = {
     // check whether buffer is local or remote
     if (isLocal(nodes(i))) {
       /* get directly from that local buffer */
-      allBuffers(buffer).take().asInstanceOf[T]
+      allBuffers(buffer).get(consumer).asInstanceOf[T]
     }
     else {
       // send PutAt message directly to remote ClusterService
-      (nodes(i) !! GetFrom(buffer)).asInstanceOf[T]
+      (nodes(i) !! GetFrom(buffer, consumer)).asInstanceOf[T]
     }
   }
   

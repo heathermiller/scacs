@@ -7,9 +7,10 @@ import akka.actor.Actor
  * Message type used to tell the master how many nodes are expected to be registered.
  *
  * @param numNodes The number of nodes the {{MasterService}} should wait to register.
- * @param numBuffers The number of one-place buffers each {{ClusterService}} has access to (same for all nodes).
+ * @param maxConumers The maximum number of consumers expected at each {{ClusterWorker}}. On each {{ClusterService}}, 1 -> maxConsumer buffers are created. 
+ * @param bufferMultiplier The buffer multiplication factor. If specified, on each {{ClusterService}}, bufferMultiplier x (1 -> maxConsumer) buffers are created.  
  */
-case class ClusterSize(numNodes: Int, numBuffers: Int)
+case class ClusterSize(numNodes: Int, maxConsumers: Int, bufferMultiplier: Int)
 
 /**
  * Message type used by the {{ClusterService}} actor on each node to
@@ -25,9 +26,10 @@ case class Announce(hostname: String, port: Int)
  * and starting the {{ClusterWorker}} thread.
  *
  * @param addresses a list of addresses of the remote nodes
- * @param numBuffers The number of one-place buffers each {{ClusterService}} has access to (same for all nodes).
+ * @param maxConsumers The maximum number of consumers expected at each {{ClusterWorker}}. On each {{ClusterService}}, 1 -> maxConsumer buffers are created.
+ * @param bufferMultiplier @param bufferMultiplier The buffer multiplication factor. If specified, on each {{ClusterService}}, bufferMultiplier x (1 -> maxConsumer) buffers are created.
  */
-case class InitializeClusterService(addresses: Array[(String, Int)], numBuffers: Int)
+case class InitializeClusterService(addresses: Array[(String, Int)], maxConsumers: Int, bufferMultiplier: Int)
 
 /**
  * Message type used by {{MasterService}} for submitting a task to a node,
@@ -131,7 +133,8 @@ case class PutAt(localBufferNum: Int, data: Any)
  * Message type used by {{ClusterWorker}} to notify its {{ClusterService}} to 
  * perform a `getFrom` on a remote {{ClusterService}}.
  *
- * @param localBufferNum The local buffer number to get from. 
+ * @param bufferIndex The local buffer number to get from.
+ * @param consumderIndex The consumer number to get from. 
  */
-case class GetFrom(localBufferNum: Int)
+case class GetFrom(bufferIndex: Int, consumerIndex: Int)
 

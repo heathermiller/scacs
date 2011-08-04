@@ -9,7 +9,8 @@ class MasterService extends Actor {
   import MasterService._
   
   var numNodes = 0
-  var numBuffers = 0
+  var maxConsumers = 0
+  var bufferMultiplier = 0
   
   //Maps
   var nodeRefs: Map[(String, Int), ActorRef] = Map() // (host, port)->ActorRef
@@ -30,9 +31,10 @@ class MasterService extends Actor {
     } // should there be more serious checking here? ...at least make sure there's a host/port?
   
   def receive = {
-    case ClusterSize(numNodes, numBuffers) =>
+    case ClusterSize(numNodes, maxConsumers, bufferMultiplier) =>
       this.numNodes = numNodes
-      this.numBuffers = numBuffers
+      this.maxConsumers = maxConsumers
+      this.bufferMultiplier = bufferMultiplier
       println("[MasterService] waiting for "+this.numNodes+" nodes to register")
       self.reply()
 
@@ -60,7 +62,7 @@ class MasterService extends Actor {
         val allNodes = (0 until nodes.length).toList
         if (debug) println("[MasterService] (class): registered nodes: "+ allNodes)
         if (debug) println("[MasterService] (class): corresponding addresses:"+addresses.mkString(","))
-        nodeRefs.values foreach { service => service !! InitializeClusterService(MasterService.addresses, numBuffers) }
+        nodeRefs.values foreach { service => service !! InitializeClusterService(MasterService.addresses, maxConsumers, bufferMultiplier) }
         MasterService.doneInit.countDown()
       }
     
@@ -140,12 +142,12 @@ object MasterService {
     TrNumIncrementer
   }
 
-  def config(hostname: String, port: Int, numNodes: Int, numBuffers: Int = 4) = {
+  def config(hostname: String, port: Int, numNodes: Int, maxConsumers: Int = 10, bufferMultiplier: Int = 1) = {
     remote.start(hostname,port)
     remote.register(actorOf[MasterService])   
 
     master = remote.actorFor(classOf[MasterService].getCanonicalName, hostname, port)
-    master !! ClusterSize(numNodes, numBuffers)
+    master !! ClusterSize(numNodes, maxConsumers, bufferMultiplier)
     
     nodes = Array.ofDim[ActorRef](numNodes)
     addresses = Array.ofDim[(String,Int)](numNodes)
@@ -360,7 +362,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       
       // assuming this is running on node 0
       println("getting item from buffer 0")
-      val item = ClusterService.getFrom[Int](0,0)
+      val item = ClusterService.getFrom[Int](0,0,0)
       println(item)
       
       // return item
