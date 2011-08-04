@@ -95,7 +95,20 @@ case class OperateOn(host: String, port: Int,
 case class OperateOnAndGet(host: String, port: Int,
                   fun: Any=>Any,
                   inputTrackingNumber: Int,
-                  outputTrackingNumber: Int)                  
+                  outputTrackingNumber: Int)
+                  
+/**
+ * Message type used by {{MasterService}} for storing a piece of data 
+ * at a specific node under a tracking number. 
+ *
+ * @param host The hostname of the {{ClusterService}} to store data at.
+ * @param port The port number of the {{ClusterService}} to store data at.
+ * @param data The data to be stored at {{ClusterService}}
+ * @param trackingNumber The tracking number used by {{MasterService}} and {{ClusterService}} for storing a piece of data on a {{ClusterService}}. 
+ */
+case class StoreAt(host: String, port: Int,
+                  data: Any,
+                  trackingNumber: Int)                  
                   
 /**
  * Message type used by {{MasterService}} for retrieving a piece of data from a node.

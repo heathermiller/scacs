@@ -106,6 +106,9 @@ class ClusterService extends Actor{
           if (!dataOpt.isEmpty)
             worker.todo.put((block, dataOpt.get, outputTrackingNumber))
       }
+      
+    case StoreAt(_, _, receivedData, trackingNumber) =>
+      data += (trackingNumber -> (Some(receivedData), emptyFunction))
     
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(input)

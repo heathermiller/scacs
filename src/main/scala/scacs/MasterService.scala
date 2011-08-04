@@ -112,6 +112,11 @@ class MasterService extends Actor {
     case msg @ OperateOnAndGet(host, port, _, _, _) =>
       if (debug) println("[MasterService] (class): sending OperateOnAndGet to "+host+":"+port)
       val nodeRef = getNode(host, port)
+      nodeRef ! msg 
+      
+    case msg @ StoreAt(host, port, data, tn) =>
+      if (debug) println("[MasterService] (class): sending StoreAt to "+host+":"+port)
+      val nodeRef = getNode(host, port)
       nodeRef ! msg      
 
     case Shutdown =>
@@ -322,6 +327,14 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     operateOnAndGet(allNodes, fun, inputTrackingNums)    
   }
   
+  def storeAt(i: Int, data: Any): Int = {
+    // "One" variant of storeAt
+    val tn = newTrackingNumber
+    val (host, port) = addresses(i)
+    master ! StoreAt(host, port, data, tn)
+    tn
+  }
+  
   //main used for testing only.
   def main(args: Array[String]) = {
     
@@ -407,6 +420,19 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     println("[Program Output] MAIN: DONE testing operateOn. Result:")
     println(res4)
 
+    /*
+     * EXAMPLE #4 
+     * testing `storeAt`
+     */
+    println("[Program Output] MAIN: testing storeAt")
+   
+    val tn5 = storeAt(appNodes, res4)
+    println("[Program Output] MAIN: DONE testing storeAt. Result stored under tn: "+tn5)
+    
+    println("[Program Output] MAIN: Now getting that result stored under tn: "+tn5)
+    val res5 = retrieveFrom[List[Int]](appNodes, tn5)
+    println("[Program Output] MAIN: Received data stored under "+tn5+", Result: "+res5)
+    
     
     MasterService.shutdown
 
