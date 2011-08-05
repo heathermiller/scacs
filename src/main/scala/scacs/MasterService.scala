@@ -52,6 +52,7 @@ class MasterService extends Actor {
 
 object MasterService {
   val doneInit = new CountDownLatch(1)
+  var master: ActorRef = null
 
   def main(args: Array[String]) = {
     val hostname = args(0)
@@ -60,20 +61,14 @@ object MasterService {
     
     remote.start(hostname, port)
     
-    val master = actorOf[MasterService].start()
+    master = actorOf[MasterService].start()
     remote.register(master)
     
     master !! ClusterSize(numNodes)
     doneInit.await()
+  }
 
-    // remotely start EchoActor
-    val response =
-      master !! StartActorAt("localhost", 9001, classOf[EchoActor])
-    val echoActor = response.get.asInstanceOf[ActorRef]
-    println(echoActor !! "hello")
-
-    master !! StopServiceAt("localhost", 9001)
-
+  def shutdown() {
     println("[Master] shutting down")
     registry.shutdownAll()
     remote.shutdown()

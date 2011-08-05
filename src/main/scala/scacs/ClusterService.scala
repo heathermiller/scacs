@@ -2,11 +2,17 @@ package scacs
 
 import akka.actor.{Actor, ActorRef}
 import Actor._
+import akka.config.Supervision.OneForOneStrategy
 import java.util.concurrent.CountDownLatch
+import java.lang.RuntimeException
 
 class ClusterService extends Actor {
   var allAddresses: List[(String, Int)] = List()
   var master: ActorRef = null
+  
+  self.faultHandler =
+    OneForOneStrategy(List(classOf[NumberFormatException],
+                           classOf[RuntimeException]), 5, 5000)
   
   def receive = {
     case Announce(hostname, port) =>
@@ -24,8 +30,11 @@ class ClusterService extends Actor {
       self.reply()
 
     case StartActorAt(_, _, clazz) =>
-      println("[ClusterService] starting instance of "+clazz)
-      val newActor = actorOf(clazz).start()
+      println("[ClusterService] creating instance of "+clazz)
+      val newActor = actorOf(clazz)
+      println("[ClusterService] starting and linking to "+newActor)
+      // start actor and link with ClusterService (self)
+      self.startLink(newActor)
       remote.register(newActor)
       newActor !! Nodes(allAddresses)
       self.reply()
