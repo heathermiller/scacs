@@ -135,7 +135,7 @@ class ClusterService extends Actor{
         case Some((dataOpt, fun)) =>
 	      if (!dataOpt.isEmpty) {
 	    	if (debug) println("[ClusterService] (class): responding with data "+dataOpt.get)
-	        self.reply(dataOpt.get) 
+	        self.reply((trackingNumber, dataOpt.get)) 
 	      }
 	      else {
 	        if (debug) println("[ClusterService] (class): dataOpt.isEmpty")
