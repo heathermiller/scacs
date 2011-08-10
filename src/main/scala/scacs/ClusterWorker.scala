@@ -9,9 +9,8 @@ class ClusterWorker(localMaster: ClusterService) extends Thread {
   import MasterService._
   
   var todo : SyncVar[(Any => Any, Any, Int)] = new SyncVar
-  //var buffers: 
-
-  @volatile var shouldShutdown = false
+  
+  @volatile var shouldShutdown = false // should set this to true at some point...
   
   override def run = {
 	while (!shouldShutdown) {

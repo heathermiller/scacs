@@ -151,3 +151,19 @@ case class PutAt(localBufferNum: Int, data: Any)
  */
 case class GetFrom(bufferIndex: Int, consumerIndex: Int)
 
+/**
+ * Message type used by {{ClusterWorker}} to notify its {{ClusterService}} to 
+ * perform an `await` on a remote {{ClusterService}}.
+ *
+ * @param bufferIndex The local buffer number to wait on.
+ * @param consumderIndex The consumer number to wait on. 
+ */
+case class Await(bufferIndex: Int, consumerIndex: Int)
+
+/**
+ * Message type used by {{ClusterWorker}} to notify its {{ClusterService}} to 
+ * perform an `signal` on a remote {{ClusterService}}.
+ *
+ * @param localBufferNum The local buffer number to signal to.
+ */
+case class Signal(localBufferNum: Int)

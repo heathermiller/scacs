@@ -122,8 +122,9 @@ class ClusterService extends Actor{
       val thisChannel = self.channel
       // this function is called when result is insert into the data table
       val onResult = (result: Any) => {
-        if (debug) println("[ClusterService] (class): sending result to channel "+thisChannel)
-        thisChannel ! (trackingNumber, result)
+        val msg = (trackingNumber, result)
+        if (debug) println("[ClusterService] (class): sending msg: "+msg+" to channel "+thisChannel)
+        thisChannel ! msg
       }
       
       data.get(trackingNumber) match {
@@ -181,7 +182,16 @@ class ClusterService extends Actor{
       
     case GetFrom(bufferIndex, consumerIndex) =>       
       val item = ClusterService.allBuffers(bufferIndex).get(consumerIndex)
-      self.reply(item)      
+      self.reply(item)
+
+    case msg @ Signal(idx) =>
+      ClusterService.allBuffers(idx).put(msg)
+      self.reply()
+      
+    case Await(bufferIndex, consumerIndex) =>
+      val item = ClusterService.allBuffers(bufferIndex).get(consumerIndex)
+      if (item.isInstanceOf[Signal]) self.reply()
+      else sys.error("[ClusterService] on receipt of Await message, correct token was not in multibuffer.")
       
     case _ =>
       println("[ClusterService] unknown message")
@@ -218,6 +228,22 @@ object ClusterService {
       // send PutAt message directly to remote ClusterService
       (nodes(i) !! GetFrom(buffer, consumer)).asInstanceOf[T]
     }
+  }
+  
+  def signal(i: Int, buffer: Int) = {
+    // check whether buffer is local or remote
+    if (isLocal(nodes(i))) {
+      /* put directly in that local buffer */
+      allBuffers(buffer).put(Signal(buffer))
+    }
+    else {
+      // send PutAt message directly to remote ClusterService
+      nodes(i) !! Signal(buffer)
+    }    
+  }
+
+  def await(i: Int, buffer: Int, consumer: Int) = {
+    nodes(i) !! Await(buffer,consumer)
   }
   
   def isLocal(actorRef: ActorRef) : Boolean = actorRef.uuid == localActorRef.uuid

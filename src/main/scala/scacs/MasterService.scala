@@ -97,12 +97,18 @@ class MasterService extends Actor {
     case msg @ RetrieveFrom(host, port, tracking) if host != "" =>
       if (debug) println("[MasterService] (class): recieved a RetrieveFrom message, with non-empty hostname.")
       val nodeRef = getNode(host, port)
-      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+msg+"to "+nodeRef)
-      val Some((tn, recvd)) = nodeRef !! msg
       
-      val response = recvd 
-      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+response+"to MasterService object.")
-      self.reply(response)
+      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+msg+"to "+nodeRef)
+      val response = nodeRef !! msg
+      if (debug) println("[MasterService] (class): while handling RetrieveFrom message, received response: "+response)
+      
+      response match {
+        case Some((tn, recvd)) =>
+          if (debug) println("[MasterService] (class): while handling RetrieveFrom message, sending msg: "+recvd+"to MasterService object.")
+          self.reply(recvd)
+        case None =>
+          sys.error("[MasterService] (class): received None from ("+host+":"+port+")")
+      }
       
     case msg @ OperateOn(host, port, _, _, _) =>
       if (debug) println("[MasterService] (class): sending OperateOn to "+host+":"+port)
@@ -138,7 +144,7 @@ object MasterService {
   var addresses: Array[(String, Int)] = null
   
   // SET THIS TO ENABLE DEBUG OUTPUT
-  var debug = true
+  var debug = false
   
   
 
@@ -341,7 +347,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     // this is how we configure the master- specify its host name, its port, and the number of nodes in the cluster
     MasterService.config("localhost", 8000, 2)
 
-    
+    /*
     /*
      * EXAMPLE #1 
      * testing `submitAt`, `retrieveFrom`, and `invokeAt`
@@ -361,12 +367,13 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
 
     //val res = retrieveFrom[List[Int]](("localhost", 8001), tn) // need to fix this
     //println("[Program Output] MAIN: Resulted obtained by calling retrieveFrom on "+tn+": "+res)
+    */
     
     /*
      * EXAMPLE #2 
      * testing `getFrom` and `putAt` on one-place buffers remotely and locally
      */
-    println("[Program Output] MAIN: testing one-place buffers")
+    println("[Program Output] MAIN: testing one-place buffers, getFrom, putAt")
     val appNodes2 = 1 // List(("localhost",8002))
     
     // this function waits for 2 secs and then gets an item from a local buffer
@@ -374,7 +381,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       Thread.sleep(2000)
       
       // assuming this is running on node 0
-      println("getting item from buffer 0")
+      println("[Program Output] MAIN: getting item from buffer 0")
       val item = ClusterService.getFrom[Int](0,0,0)
       println(item)
       
@@ -382,21 +389,22 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       item
     }
 
-    val tn1 = submitAt(appNodes, "", localGetFun)
+    val tn1 = submitAt(0, "", localGetFun)
     
     // this function puts an item into a buffer on a remote node
     val remotePutFun = (str: String) => {
       // assuming this is running on node 1
-      println("putting item into buffer 0")
+      println("[Program Output] MAIN: putting item into buffer 0")
       ClusterService.putAt(0,0, 999)
     }
     
     val tn2 = submitAt(appNodes2, "", remotePutFun)
     
-    val res2 = retrieveFrom[Int](appNodes, tn1)
+    val res2 = retrieveFrom[Int](0, tn1)
     println(res2)
-    println("[Program Output] MAIN: DONE testing one-place buffers")
+    println("[Program Output] MAIN: DONE testing one-place buffers, getFrom/putAt")
 
+    /*
     /*
      * EXAMPLE #3 
      * testing `operateOn`
@@ -432,12 +440,56 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     println("[Program Output] MAIN: Now getting that result stored under tn: "+tn5)
     val res5 = retrieveFrom[List[Int]](appNodes, tn5)
     println("[Program Output] MAIN: Received data stored under "+tn5+", Result: "+res5)
+*/
+   /*
+     * EXAMPLE #5 
+     * testing `signal` and `await` on one-place buffers remotely and locally
+     */
+    println("[Program Output] MAIN: testing one-place buffers, signal/await")
+    
+    // this function waits for 2 secs and then gets an item from a local buffer
+    val localAwaitFun = (str: String) => {
+      if(debug) println("[ClusterService] recieved closure: putting thread to sleep for 5 seconds...")
+      Thread.sleep(2000)
+      if(debug) println("[ClusterService] recieved closure: woke thread up")
+      
+      // assuming this is running on node 0
+      println("[ClusterService] recieved closure: invoking await on buffer 0")
+      if(debug) println("[ClusterService] recieved closure: calling await...")
+      ClusterService.await(0, 0, 0)
+      if(debug) println("[ClusterService] finished calling await...")
+      
+      //returning something...
+      9999
+    }
+
+    if(debug) println("[MasterService] sending closure: localAwaitFun")
+    val tn6 = submitAt(0, "", localAwaitFun)
+    if(debug) println("[MasterService] closure, localAwaitFun, sent, with tn "+tn6)
+    
+    // this function puts an item into a buffer on a remote node
+    val remoteSignalFun = (str: String) => {
+      // assuming this is running on node 1
+      println("[ClusterService] received closure: putting token into buffer 0")
+      if(debug) println("[Program Output] MAIN: recieved closure: calling signal...")
+      ClusterService.signal(0, 0)
+      //ClusterService.putAt(0, 1, 999)
+      if(debug) println("[Program Output] MAIN: recieved closure: finished calling signal")
+    }
+    
+    if(debug) println("[Program Output] MAIN: sending closure: localSignalFun")
+    val tn7 = submitAt(1, "", remoteSignalFun)
+    if(debug) println("[Program Output] MAIN: sending closure: localSignalFun, with tn "+tn7)
+
+    println("[Program Output] MAIN: still testing signal/await, now getting that result stored under tn: "+tn6)
+    val res6 = retrieveFrom[Int](0, tn6)
+    println("[Program Output] MAIN: still testing signal/await, received data stored under "+tn6+", Result: "+res6)    
+    
+    println("[Program Output] MAIN: DONE testing one-place buffers, signal/await")
     
     
     MasterService.shutdown
-
-//    terminate.countDown()
-//    terminate.await()
+    
   }
 
 }
