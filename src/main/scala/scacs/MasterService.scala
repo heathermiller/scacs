@@ -191,8 +191,8 @@ object MasterService {
     val nodeRef = getNode(host, port)
     nodeRef ! InvokeAt(host, port, internalFun, data, tn)
 
-    val res = master !! RetrieveFrom("", 0, tn)
-    res.get
+    val Some((trNum, res)) = master !! RetrieveFrom("", 0, tn)
+    res
     
   }        
   
@@ -210,8 +210,8 @@ object MasterService {
         	nodeRef ! InvokeAt(hostname, port, internalFun, data, tn)
       }
       for (tn <- tns) yield {
-        val res = master !! RetrieveFrom("", 0, tn)
-        res.get
+        val Some((trNum, res)) = master !! RetrieveFrom("", 0, tn)
+        res
       }
     } else 
       sys.error("[ERROR: MasterService.invokeAt] The number of nodes you'd like to submit a task to and the number of pieces of partitioned must be equal.")
@@ -281,7 +281,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     nodeRef ! OperateOnAndGet(host, port, internalFun, inputTn, outputTn)
     
     val Some((trNum, res))= master !! RetrieveFrom("", 0, outputTn)
-    (trNum, res)
+    res
   }
    
   def operateOnAndGet[T](someNodes: List[Int], fun: T=>Any, inputTrackingNums: List[Int]): List[Any] = {
@@ -299,7 +299,7 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
         }
         for (tn <- outputTns) yield {
           val Some((trNum, res))= master !! RetrieveFrom("", 0, tn)
-          (trNum, res)
+          res
         }        
       } else 
         sys.error("[ERROR: MasterService.operateOnAndGet] The number of nodes you'd like to submit a task to and the number of tracking numbers must be equal.")      
