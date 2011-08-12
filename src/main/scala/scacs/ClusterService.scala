@@ -89,10 +89,9 @@ class ClusterService extends Actor{
         worker.todo.put((block, result, outputTrackingNumber))
       }
       // this function should be called when the output becomes available
-      val thisChannel = self.channel // save ActorRef of sender
       val onOutput = (result: Any) => {
-        if (debug) println("[ClusterService] (class), in OperateOnAndGet: sending result: "+result+" to channel "+thisChannel)
-        thisChannel ! (outputTrackingNumber, result)
+        if (debug) println("[ClusterService] (class), in OperateOnAndGet: sending result: "+result+" to master")
+        master ! (outputTrackingNumber, result)
       }      
       data += ( outputTrackingNumber -> (None, onOutput))
       
@@ -113,7 +112,7 @@ class ClusterService extends Actor{
     case InvokeAt(_, _, block, input, trackingNumber) =>
       val result = block(input)
       data += (trackingNumber -> (Some(result), emptyFunction))
-      self.sender.get ! (trackingNumber, result)
+      master ! (trackingNumber, result)
 
     case RetrieveFrom(_, _, trackingNumber) =>
       if (debug) println("[ClusterService] (class): received a RetrieveFrom message")

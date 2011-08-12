@@ -13,22 +13,12 @@ class MasterService extends Actor {
   var bufferMultiplier = 0
   
   //Maps
-  var nodeRefs: Map[(String, Int), ActorRef] = Map() // (host, port)->ActorRef
   // (host, port) -> NodeID
   // ActorRef -> NodeID
   // ActorRef -> (host,port)
   //keep track of tracking numbers? A way to keep track of multiple distributed data structures? Fault tolerance by keeping track of transformations on tns.
   var results: Map[Int, Any] = Map() // this keeps track of some tracking numbers + results. Those received with retrieveFrom. But what about remote and thus distributed?
   var channels: Map[Int,Channel[Any]] = Map() //duplicate this in ClusterService (with pair, (channel, fun) ) 
-
-  def getNode(host: String, port: Int): ActorRef =
-    nodeRefs.get((host, port)) match {
-      case None =>
-        MasterService.terminate.countDown() 
-        sys.error("[MasterService] node "+host+":"+port+" not registered")
-      case Some(nodeRef) =>
-        nodeRef
-    } // should there be more serious checking here? ...at least make sure there's a host/port?
   
   def receive = {
     case ClusterSize(numNodes, maxConsumers, bufferMultiplier) =>
@@ -65,16 +55,6 @@ class MasterService extends Actor {
         nodeRefs.values foreach { service => service !! InitializeClusterService(MasterService.addresses, maxConsumers, bufferMultiplier) }
         MasterService.doneInit.countDown()
       }
-    
-    case msg @ SubmitAt(host, port, fun, input, tracking) =>
-      if (debug) println("[MasterService] (class): sending SubmitAt to "+host+":"+port)
-      val nodeRef = getNode(host, port)
-      nodeRef ! msg
-
-    case msg @ InvokeAt(host, port, fun, input, tracking) =>
-      if (debug) println("[MasterService] (class): sending InvokeAt to "+host+":"+port)
-      val nodeRef = getNode(host, port)
-      nodeRef ! msg
 
     case (trackingNumber: Int, result: Any) =>
       if ( channels.contains(trackingNumber) ) {
@@ -108,22 +88,7 @@ class MasterService extends Actor {
           self.reply(recvd)
         case None =>
           sys.error("[MasterService] (class): received None from ("+host+":"+port+")")
-      }
-      
-    case msg @ OperateOn(host, port, _, _, _) =>
-      if (debug) println("[MasterService] (class): sending OperateOn to "+host+":"+port)
-      val nodeRef = getNode(host, port)
-      nodeRef ! msg
-      
-    case msg @ OperateOnAndGet(host, port, _, _, _) =>
-      if (debug) println("[MasterService] (class): sending OperateOnAndGet to "+host+":"+port)
-      val nodeRef = getNode(host, port)
-      nodeRef ! msg 
-      
-    case msg @ StoreAt(host, port, data, tn) =>
-      if (debug) println("[MasterService] (class): sending StoreAt to "+host+":"+port)
-      val nodeRef = getNode(host, port)
-      nodeRef ! msg      
+      }          
 
     case Shutdown =>
       nodeRefs.values foreach { service => service ! Shutdown }
@@ -141,12 +106,20 @@ object MasterService {
   
   var master: ActorRef = null
   var nodes: Array[ActorRef]= null
+  var nodeRefs: Map[(String, Int), ActorRef] = Map() // (host, port)->ActorRef  
   var addresses: Array[(String, Int)] = null
   
   // SET THIS TO ENABLE DEBUG OUTPUT
   var debug = false
   
-  
+  def getNode(host: String, port: Int): ActorRef =
+    nodeRefs.get((host, port)) match {
+      case None =>
+        MasterService.terminate.countDown() 
+        sys.error("[MasterService] node "+host+":"+port+" not registered")
+      case Some(nodeRef) =>
+        nodeRef
+  } // should there be more serious checking here? ...at least make sure there's a host/port?  
 
   def newTrackingNumber = {
     TrNumIncrementer += 1
@@ -178,8 +151,9 @@ object MasterService {
     val (host, port) = addresses(i)
     val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val tn = newTrackingNumber
-    if (debug) println("[MasterService] (object): sending SubmitAt to master with tn "+tn)
-    master ! SubmitAt(host, port, internalFun, data, tn)
+    if (debug) println("[MasterService] (object): sending SubmitAt to "+host+":"+port)
+    val nodeRef = getNode(host, port)
+    nodeRef ! SubmitAt(host, port, internalFun, data, tn)
     tn
   }
  
@@ -214,13 +188,14 @@ object MasterService {
     val internalFun = (data: Any)=> fun(data.asInstanceOf[T])
     val tn = newTrackingNumber
     if (debug) println("[MasterService] (object): sending InvokeAt(One) to master with tn "+tn)
-    master ! InvokeAt(host, port, internalFun, data, tn)
+    val nodeRef = getNode(host, port)
+    nodeRef ! InvokeAt(host, port, internalFun, data, tn)
 
     val res = master !! RetrieveFrom("", 0, tn)
     res.get
     
-  }      
-
+  }        
+  
   def invokeAt[T](someNodes: List[Int], partitionedData: List[T], fun: T=>Any): List[Any] = {
     // "Some" variant of invokeAt   
     var tns = List[Int]()
@@ -230,8 +205,9 @@ object MasterService {
         val internalFun = (data: Any) => fun(data.asInstanceOf[T])
         val tn = newTrackingNumber
         tns = tn :: tns
+        val nodeRef = getNode(hostname, port)
         if (debug) println("[MasterService] (object): sending InvokeAt(Some) to master with tn "+tn)
-        master ! InvokeAt(hostname, port, internalFun, data, tn)
+        	nodeRef ! InvokeAt(hostname, port, internalFun, data, tn)
       }
       for (tn <- tns) yield {
         val res = master !! RetrieveFrom("", 0, tn)
@@ -271,7 +247,8 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val outputTn = if (inPlace) inputTn else newTrackingNumber
     if (debug) println("[MasterService] (object): sending OperateOn to master with tn "+outputTn)
-    master ! OperateOn(host, port, internalFun, inputTn, if (inPlace) None else Some(outputTn))
+    val nodeRef = getNode(host, port)
+    nodeRef ! OperateOn(host, port, internalFun, inputTn, if (inPlace) None else Some(outputTn))
     outputTn
   }
   
@@ -300,7 +277,8 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     val internalFun = (data: Any) => fun(data.asInstanceOf[T])
     val outputTn = newTrackingNumber
     if (debug) println("[MasterService] (object): sending OperateOnAndGet(One) to master with tn "+outputTn)
-    master ! OperateOnAndGet(host, port, internalFun, inputTn, outputTn)
+    val nodeRef = getNode(host, port)
+    nodeRef ! OperateOnAndGet(host, port, internalFun, inputTn, outputTn)
     
     val Some((trNum, res))= master !! RetrieveFrom("", 0, outputTn)
     (trNum, res)
@@ -315,8 +293,9 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
           val internalFun = (data: Any) => fun(data.asInstanceOf[T])
           val outputTn = newTrackingNumber
           outputTns = outputTn :: outputTns
+          val nodeRef = getNode(hostname, port)
           if (debug) println("[MasterService] (object): sending OperateOnAndGet(Some) to master with tn "+outputTn)
-          master ! OperateOnAndGet(hostname, port, internalFun, inputTn, outputTn)
+          nodeRef ! OperateOnAndGet(hostname, port, internalFun, inputTn, outputTn)
         }
         for (tn <- outputTns) yield {
           val Some((trNum, res))= master !! RetrieveFrom("", 0, tn)
@@ -337,7 +316,8 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
     // "One" variant of storeAt
     val tn = newTrackingNumber
     val (host, port) = addresses(i)
-    master ! StoreAt(host, port, data, tn)
+    val nodeRef = getNode(host, port)
+    nodeRef ! StoreAt(host, port, data, tn)
     tn
   }
   
