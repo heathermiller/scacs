@@ -45,7 +45,7 @@ object Tests {
 
   
   
-  def startup = MasterService.config("localhost", 8000, 2)
+  def startup(master: String = "localhost", port: Int = 8000, numNodes: Int = 2) = MasterService.config(master, port, numNodes)
   
   def testSubmitRetrieve= { 
      //testing `submitAt` and `retrieveFrom`    
@@ -159,8 +159,9 @@ object Tests {
   
   def main(args: Array[String]) {
 
+    val master = args(0)
     // configures MasterService with hostname "localhost", port 8000, and tells it to expect 2 nodes to register
-    startup 
+    startup(master) 
     
     // tests `submitAt` and `retrieveFrom`
     testSubmitRetrieve

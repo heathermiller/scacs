@@ -108,6 +108,7 @@ object MasterService {
   var nodes: Array[ActorRef]= null
   var nodeRefs: Map[(String, Int), ActorRef] = Map() // (host, port)->ActorRef  
   var addresses: Array[(String, Int)] = null
+  var tn2nodeID: Map[Int, ActorRef] = Map() // trackingNumber -> ActorRef
   
   // SET THIS TO ENABLE DEBUG OUTPUT
   var debug = false
@@ -236,6 +237,14 @@ def invokeAtAll[T](partitionedData: List[T], fun: T=>Any): List[Any] = {
       case None => sys.error("[ERROR: MasterService.retrieveFrom] Data object " + trackingNumber + " could not be retrieved from node " + i)
     }
   }
+  
+  /*
+  def retrieve[T](tn: Int) = {
+    val nodeID = tn2nodeID(tn)
+    val result = retrieveFrom[T](nodeID, tn)
+    result
+  }
+  */
   
   def operateOn[T](i: Int, fun: T=>Any, inPlace: Boolean, inputTn: Int): Int = {
     // "One" variant of operateOn     
