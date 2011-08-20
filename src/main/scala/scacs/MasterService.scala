@@ -28,13 +28,13 @@ class MasterService extends Actor {
       if (nodeRefs.size == numNodes) {
         println("[Master] all nodes have registered")
         nodeRefs.values foreach { service =>
-          service !! Nodes(nodeRefs.keys.toList)
+          service ? Nodes(nodeRefs.keys.toList)
         }
         MasterService.doneInit.countDown()
       }
 
     case startMsg @ StartActorAt(host, port, clazz) =>
-      nodeRefs((host, port)) !! startMsg
+      nodeRefs((host, port)) ? startMsg
       val startedActor = remote.actorFor(
         clazz.getCanonicalName,
         host,
@@ -42,7 +42,7 @@ class MasterService extends Actor {
       self.reply(startedActor)
 
     case stopMsg @ StopServiceAt(host, port) =>
-      nodeRefs((host, port)) !! stopMsg
+      nodeRefs((host, port)) ? stopMsg
       self.reply()
 
     case _ =>
@@ -64,7 +64,7 @@ object MasterService {
     master = actorOf[MasterService].start()
     remote.register(master)
     
-    master !! ClusterSize(numNodes)
+    master ? ClusterSize(numNodes)
     doneInit.await()
   }
 

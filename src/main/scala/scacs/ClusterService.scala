@@ -36,7 +36,7 @@ class ClusterService extends Actor {
       // start actor and link with ClusterService (self)
       self.startLink(newActor)
       remote.register(newActor)
-      newActor !! Nodes(allAddresses)
+      newActor ? Nodes(allAddresses)
       self.reply()
 
     case StopServiceAt(_, _) =>

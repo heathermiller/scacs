@@ -11,7 +11,7 @@ object Test {
     
     // remotely start EchoActor
     val response =
-      master !! StartActorAt("localhost", 9001, classOf[EchoActor])
+      master ? StartActorAt("localhost", 9001, classOf[EchoActor])
     val echoActor = response.get.asInstanceOf[ActorRef]
     // this will lead to an exception in echoActor
     echoActor ! "hello"
@@ -19,7 +19,7 @@ object Test {
     echoActor ! "17"
     
     Thread.sleep(5000)
-    master !! StopServiceAt("localhost", 9001)
+    master ? StopServiceAt("localhost", 9001)
     shutdown()
   }
 }
